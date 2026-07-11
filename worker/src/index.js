@@ -44,6 +44,19 @@ export default {
         return j({ current: env.GEMINI_MODEL,
                    available: (d.models || []).map(x => x.name.replace("models/", "")) });
       }
+      if (p === "/admin/jobs" && req.method === "GET") {
+        const l = await env.STORE.list({ prefix: "videos/", delimiter: "/" });
+        const ids = (l.delimitedPrefixes || []).map(x => x.split("/")[1]);
+        const jobs = await Promise.all(ids.map(async id => {
+          const [s, mt] = await Promise.all([
+            getJSON(env, `videos/${id}/status.json`), getJSON(env, `videos/${id}/meta.json`)]);
+          if (!s) return null;
+          const total = s.segments || s.batches || 1;
+          const done = s.stage === "done" ? total : (s.done_segments ?? s.done_batches ?? 0);
+          return { id, title: mt?.title || id, stage: s.stage, done, total, cues: s.cues || 0 };
+        }));
+        return j(jobs.filter(Boolean));
+      }
       if (p === "/admin/videos" && req.method === "POST") return await createVideo(req, env);
       if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/status$/)) && req.method === "GET")
         return await getStatus(m[1], env);
@@ -597,6 +610,8 @@ function adminPage() {
   <div id="stageLine"><span>影片 <b id="svid">-</b></span><span id="sstage">-</span><span id="sprog">-</span></div>
   <div class="bar"><div id="fill"></div></div>
 </div>
+<h3 style="margin:20px 0 6px;font-size:15px">任務總覽</h3>
+<div id="jobs" style="font-size:13px"></div>
 <div id="log"></div>
 <script>
 const $ = id => document.getElementById(id);
@@ -637,6 +652,27 @@ function startPoll(id){
   }, 2500);
 }
 function stopPoll(){ if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+async function refreshJobs(){
+  try {
+    const jobs = await api('/admin/jobs');
+    const el = $('jobs');
+    el.innerHTML = jobs.length ? '' : '<div style="color:var(--dim)">目前沒有任務</div>';
+    for (const jb of jobs) {
+      const pct = Math.round(100 * jb.done / jb.total);
+      const row = document.createElement('div');
+      row.style.cssText = 'background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0';
+      const badge = jb.stage === 'done' ? '<a href="/?v=' + jb.id + '" target="_blank">✅ 完成 ' + jb.cues + ' cues</a>'
+        : ({gemini:'👁 Gemini 看片', translating:'✍ 翻譯中', aligned:'⏳ 待翻譯', translated:'🔗 待合併'}[jb.stage] || jb.stage) + ' ' + jb.done + '/' + jb.total;
+      row.innerHTML = '<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span style="flex-shrink:0">' + badge + '</span></div>'
+        + '<div class="bar" style="margin-top:6px"><div style="height:100%;width:' + pct + '%;background:' + (jb.stage === 'done' ? 'var(--ok)' : 'var(--acc)') + '"></div></div>';
+      row.querySelector('span').textContent = jb.title;
+      el.appendChild(row);
+    }
+  } catch (e) {}
+}
+refreshJobs();
+setInterval(refreshJobs, 5000);
 
 async function run(){
   const btn = $('btn'); btn.disabled = true; btn.textContent = '⏳ 執行中…';

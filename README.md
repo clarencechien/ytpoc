@@ -9,7 +9,7 @@
 |---|---|---|
 | `/` | 影片清單(標題/cue 數/YouTube 連結);`/?v=<id>` 播放頁 | 公開 |
 | `/list`、`/cues/<id>` | 清單 / 成品字幕 JSON(R2) | 公開 |
-| `/admin` | 提交頁:貼連結→ack→進度條→完成連結 | Access(Google SSO)+ email |
+| `/admin` | 提交頁:貼連結→ack→進度條;任務總覽(佇列中每支影片的階段/進度,5 秒自動更新) | Access(Google SSO)+ email |
 | `/admin/videos*`、`/admin/models` | pipeline API / 模型清單 | 同上 |
 
 ## 字幕產生流程(全自動)
