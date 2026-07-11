@@ -134,6 +134,55 @@ ffmpeg -i video.mp4 -vf "subtitles=output/zh.ass" -c:a copy burned.mp4
 成本假設(52 分鐘/集):字幕翻譯 LLM 成本個位數美元;VLM OCR 另計(約每集再一個量級),
 所以 M3 才做且做成可選。
 
+## v2-personal:個人版下一步(Gemini API + R2-only,已評估可行)
+
+在通用 v2 之前先做個人版:自己一個帳號能貼連結產字幕,其他人唯讀。
+
+### 架構(全 Cloudflare 免費層 + Workers Paid $5/月可選)
+
+```
+[Pages] 公開播放頁(唯讀,任何人可看)
+        /admin 提交頁(貼 YouTube link、看 pipeline 進度、手動上傳 vtt 備援)
+   │
+[Cloudflare Access] 只有 /admin 與寫入 API 要過 Google SSO,
+        policy 限定 allowlist email(你的 Gmail);Worker 驗 Cf-Access-Jwt-Assertion
+   │
+[Worker API] 無 D1,狀態與資料全存 R2:
+        videos/<id>/meta.json      — 影片資訊
+        videos/<id>/status.json    — pipeline 階段狀態(admin 頁輪詢)
+        videos/<id>/cues.json      — 成品字幕(播放頁動態載入)
+        index.json                 — 影片清單(播放頁首頁)
+   │
+[Gemini API](AI Studio key,存 wrangler secret,絕不進前端)
+        路線A(優先):影片有字幕軌 → 抓下來走 v1 雙源翻譯(便宜、快)
+        路線B(備援):Gemini 原生支援直接餵 YouTube URL 看片 →
+                      切 5-10 分鐘段(videoMetadata offset)逐段
+                      轉錄+讀畫面字卡+翻譯,一次解決 ingest 與 OCR 兩大難題
+```
+
+### 為什麼 R2-only 成立
+
+單一寫入者(只有你)→ 不需要 D1 的並發控制與關聯查詢;每支影片一個 JSON
+資料夾、一個全站 index.json 就是完整資料模型。要升級社群版時 blob → D1 好遷。
+
+### 已知取捨
+
+- 免費層 Worker 沒有 Queues/長任務:pipeline 由 admin 頁輪詢驅動逐段執行
+  (每段一個 request,LLM 等待是網路時間不吃 CPU 限額);升 $5 Workers Paid
+  可換 Queues + Cron,免顧頁面
+- Gemini 看片的 token 消耗:約 300 tokens/秒,52 分鐘全片 ≈ 1M tokens,
+  Flash 模型個位數美元/集;所以字幕軌路線永遠優先,看片是備援
+- 時間戳精度:路線B 的段內時間戳需抽驗,必要時用段落 offset 校正
+- AI Studio 免費 key 有每日配額,正式跑建議掛計費(仍然便宜)
+
+### 下一步順序
+
+1. Worker + R2 骨架:貼連結 → 建 videos/<id>/ → status.json 流轉
+2. Access 接 Google SSO,鎖 /admin 與寫入 API
+3. 路線A(字幕軌 + v1 pipeline 移植)先跑通端到端
+4. 路線B(Gemini 看片)做 10 分鐘段的 POC,驗時間戳與字卡辨識品質
+5. 播放頁改吃 R2 的 cues.json(本 POC player 元件化)
+
 ## 社群化評估(v3 方向:限縮「YouTube 韓綜」)
 
 ### 為什麼限縮到 YouTube 韓綜
