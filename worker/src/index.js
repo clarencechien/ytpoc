@@ -147,8 +147,18 @@ async function translateNextBatch(id, env) {
   return j(status);
 }
 
+async function loadGlossary(env) {
+  try {
+    const r = await env.ASSETS.fetch("http://assets/glossary.json");
+    if (r.ok) return await r.text();
+  } catch (e) {}
+  return "[]";
+}
+
 async function geminiTranslate(env, cues, context) {
+  const glossary = await loadGlossary(env);
   const prompt = `你是韓國綜藝字幕譯者。把每個 cue 翻成台灣正體中文。
+譯名表(強制鎖定,出現就必須用表內譯名):${glossary}
 規則:speech 以韓文 ko 為語意主源(en 為人工英譯參考,韓英矛盾信韓文);card 是畫面字卡,由 en 翻譯,用韓綜字卡語感(短、有哏)。
 台灣用詞(禁:視頻/質量/網絡/信息/軟件/屏幕/立馬);綜藝口語;每行≤20全形字,超過在語意邊界用\\n斷行(最多兩行);ko 中的 >> 是說話者標記不要翻;沒把握的句尾加⚠。
 前文語境(僅參考,不要輸出):${JSON.stringify(context.map(c => c.zh || c.en))}
@@ -223,7 +233,9 @@ async function geminiNextSegment(id, env) {
   const n = status.done_segments;
   const startS = n * GEMINI_SEG_S;
   const endS = Math.min((n + 1) * GEMINI_SEG_S, status.duration_s);
+  const glossary = await loadGlossary(env);
   const prompt = `你是韓國綜藝字幕譯者兼轉錄員,處理影片 ${startS} 秒到 ${endS} 秒這一段。
+譯名表(強制鎖定):${glossary}
 任務:
 1. 聽出所有韓語對話,依語意斷句成 cue(kind="speech",ko=韓文原文)。
 2. 讀出畫面上出現的韓綜字卡/效果字(kind="card",ko=畫面原文;背景雜訊文字不要)。

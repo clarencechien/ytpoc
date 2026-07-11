@@ -26,13 +26,24 @@ html = tpl.replace("__CUES_JSON__", payload).replace("__BUILD__", build)
 # Cloudflare Pages preview:public/ 整包可直接部署
 pub = ROOT / "public"
 pub.mkdir(exist_ok=True)
-# public 版在 meta 列加 srt/ass 下載連結(與 index.html 同層)
-pub_html = html.replace(
+# public 版:動態模式(不內嵌 cues,執行時抓 /list、/cues/<id>)
+dyn = tpl.replace("__CUES_JSON__", "null").replace("__BUILD__", build)
+pub_html = dyn.replace(
     '<span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC</span>',
     '<span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・'
     '<a href="zh.srt" download style="color:#8b93a5">下載 SRT</a>・'
     '<a href="zh.ass" download style="color:#8b93a5">下載 ASS</a></span>')
 (pub / "index.html").write_text(pub_html, encoding="utf-8")
+
+# v1 那集的 cues 放成靜態備援(動態頁 /cues/<id> 404 時 fallback /cues-<id>.json)
+(pub / "cues-tFaHkZO587c.json").write_text(payload.replace("<\\/", "</"), encoding="utf-8")
+
+# 合併 glossary(genre 層 + 頻道層)給 worker 翻譯 prompt 用
+import itertools
+gg = json.loads((ROOT / "glossary_genre.json").read_text())
+gc = json.loads((ROOT / "glossary.json").read_text())
+merged = [{"ko": g["ko"], "zh": g["zh"]} for g in itertools.chain(gg, gc)]
+(pub / "glossary.json").write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
 for f in ["zh.srt", "zh.ass", "meta.zh.json"]:
     src = ROOT / "output" / f
     if src.exists():

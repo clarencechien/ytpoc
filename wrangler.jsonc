@@ -10,7 +10,7 @@
 
   // 靜態資產:public/(播放頁)。命中資產直接回檔;
   // /admin /videos /cues /list 無對應檔案 → 進 worker 程式。
-  "assets": { "directory": "public" },
+  "assets": { "directory": "public", "binding": "ASSETS" },
 
   // R2:唯一儲存層(無 D1)。bucket 要先建好(R2 → Create bucket → kvs-krsub)。
   "r2_buckets": [{ "binding": "STORE", "bucket_name": "kvs-krsub" }],
