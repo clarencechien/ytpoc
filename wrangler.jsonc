@@ -15,6 +15,13 @@
   // R2:唯一儲存層(無 D1)。bucket 要先建好(R2 → Create bucket → kvs-krsub)。
   "r2_buckets": [{ "binding": "STORE", "bucket_name": "kvs-krsub" }],
 
+  // Queues(Workers Paid):pipeline 自驅動,送出後關頁面也會跑完
+  // 先建 queue:Dashboard → Queues → Create → 名稱 kvs-jobs
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "kvs-jobs" }],
+    "consumers": [{ "queue": "kvs-jobs", "max_batch_size": 1, "max_retries": 8 }]
+  },
+
   "vars": {
     // Cloudflare Access 驗證後注入的 email 必須等於此值才允許寫入
     "ALLOWED_EMAIL": "clarence.chien@gmail.com",

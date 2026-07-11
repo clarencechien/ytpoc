@@ -58,7 +58,31 @@ export default {
       return j({ error: String(e && e.stack || e) }, 500);
     }
   },
+  async queue(batch, env) {
+    for (const msg of batch.messages) {
+      const { id } = msg.body;
+      const status = await getJSON(env, `videos/${id}/status.json`);
+      if (!status || status.stage === "done") { msg.ack(); continue; }
+      try {
+        let s;
+        if (status.stage === "gemini") s = await (await geminiNextSegment(id, env)).json();
+        else if (status.stage === "translated") s = await (await finalize(id, env)).json();
+        else if (status.done_batches < status.batches) s = await (await translateNextBatch(id, env)).json();
+        else s = await (await finalize(id, env)).json();
+        if (s.error) throw new Error(s.error);
+        if (s.stage !== "done") await env.JOBS.send({ id });
+        msg.ack();
+      } catch (e) {
+        msg.retry({ delaySeconds: 30 }); // 524/截斷等暫時錯誤交給 Queues 退避重試
+      }
+    }
+  },
 };
+
+async function enqueue(env, id) {
+  try { if (env.JOBS) { await env.JOBS.send({ id }); return true; } } catch (e) {}
+  return false;
+}
 
 // ---------- R2 helpers ----------
 const getJSON = async (env, key) => {
@@ -100,12 +124,14 @@ async function createVideo(req, env) {
         existing.segments = Math.ceil(duration_s / (existing.seg_s || 360));
         if (existing.done_segments < existing.segments) existing.stage = "gemini";
         await putJSON(env, `videos/${id}/status.json`, existing);
-        return j({ id, mode: "gemini", segments: existing.segments, resumed: true, extended: true });
+        const q1 = await enqueue(env, id);
+        return j({ id, mode: "gemini", segments: existing.segments, resumed: true, extended: true, queued: q1 });
       }
     }
+    const q2 = existing.stage !== "done" ? await enqueue(env, id) : false;
     if (existing.stage === "gemini")
-      return j({ id, mode: "gemini", segments: existing.segments, resumed: true });
-    return j({ id, cues: existing.cues, resumed: true });
+      return j({ id, mode: "gemini", segments: existing.segments, resumed: true, queued: q2 });
+    return j({ id, cues: existing.cues, resumed: true, queued: q2 });
   }
 
   // 沒手貼原料:先試抓字幕軌;YouTube 擋 IP 就退 Gemini 看片(路線B,需片長)
@@ -137,7 +163,7 @@ async function createVideo(req, env) {
         stage: "gemini", duration_s, segments, done_segments: 0, cues: 0, seg_s: GEMINI_SEG_S,
         open: !(+body.duration_min > 0), // 片長是估的 → 開放式掃描,掃到影片結尾為止
       });
-      return j({ id, mode: "gemini", segments });
+      return j({ id, mode: "gemini", segments, queued: await enqueue(env, id) });
     }
   }
 
@@ -155,7 +181,7 @@ async function createVideo(req, env) {
     stage: "aligned", cues: aligned.length,
     batches: Math.ceil(aligned.length / +env.BATCH_SIZE), done_batches: 0,
   });
-  return j({ id, cues: aligned.length });
+  return j({ id, cues: aligned.length, queued: await enqueue(env, id) });
 }
 
 // ---------- 翻譯:每呼叫一次做一批(admin 頁輪詢驅動,免 Queues) ----------
@@ -593,7 +619,12 @@ function startPoll(id){
     try {
       const s = await api('/admin/videos/' + id + '/status');
       renderStatus(id, s);
-      if (s.stage === 'done') stopPoll();
+      if (s.stage === 'done') {
+        stopPoll();
+        const a = document.createElement('a'); a.href = '/?v=' + id; a.target = '_blank'; a.textContent = '/?v=' + id;
+        const w = document.createElement('span'); w.append('🎉 完成,開啟播放頁:', a);
+        log(w, 'ok');
+      }
     } catch (e) {}
   }, 2500);
 }
@@ -608,6 +639,7 @@ async function run(){
     const v = await api('/admin/videos', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)});
     log('✅ 已受理:' + v.id + (v.resumed ? '(續跑既有進度)' : v.mode === 'gemini' ? '(Gemini 看片,' + v.segments + ' 段)' : '(' + v.cues + ' cues)'), 'ok');
     startPoll(v.id);
+    if (v.queued) { log('已排入佇列,關掉本頁也會跑完;下方進度條持續更新', 'ok'); return; }
     let s = await api('/admin/videos/' + v.id + '/status');
     renderStatus(v.id, s);
     async function step(path){
