@@ -11,12 +11,12 @@ directory = "../public"
 # R2:唯一的儲存層(無 D1)。部署前 bucket 必須先建好,否則 deploy 失敗。
 [[r2_buckets]]
 binding = "STORE"
-bucket_name = "ytpoc-krsub"
+bucket_name = "kvs-krsub"
 
 [vars]
 # Cloudflare Access 驗證後注入的 email 必須等於此值才允許寫入
 ALLOWED_EMAIL = "clarence.chien@gmail.com"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 BATCH_SIZE = "60"
 
 # 機密(不進 repo):Dashboard → Settings → Variables and Secrets → GEMINI_API_KEY
