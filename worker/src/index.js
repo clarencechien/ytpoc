@@ -108,7 +108,7 @@ async function createVideo(req, env) {
         title: body.title || id, created: new Date().toISOString(), source: "gemini-video",
       });
       await putJSON(env, `videos/${id}/status.json`, {
-        stage: "gemini", duration_s, segments, done_segments: 0, cues: 0,
+        stage: "gemini", duration_s, segments, done_segments: 0, cues: 0, seg_s: GEMINI_SEG_S,
       });
       return j({ id, mode: "gemini", segments });
     }
@@ -226,7 +226,7 @@ async function getStatus(id, env) {
 }
 
 // ---------- 路線B:Gemini 直接看片(轉錄+字卡+翻譯,按段) ----------
-const GEMINI_SEG_S = 360; // 6 分鐘一段
+const GEMINI_SEG_S = 180; // 3 分鐘一段:6 分鐘會讓單次呼叫超時(524)
 
 // 用 countTokens 免費探測片長:影片 token 率約 300/秒(預設解析度)
 async function geminiProbeDuration(id, env) {
@@ -252,8 +252,9 @@ async function geminiNextSegment(id, env) {
   if (status.stage !== "gemini") return j({ error: `stage=${status.stage},非 Gemini 路線` }, 400);
 
   const n = status.done_segments;
-  const startS = n * GEMINI_SEG_S;
-  const endS = Math.min((n + 1) * GEMINI_SEG_S, status.duration_s);
+  const SEG = status.seg_s || 360;
+  const startS = n * SEG;
+  const endS = Math.min((n + 1) * SEG, status.duration_s);
   const glossary = await loadGlossary(env);
   const prompt = `你是韓國綜藝字幕譯者兼轉錄員,處理影片 ${startS} 秒到 ${endS} 秒這一段。
 譯名表(強制鎖定):${glossary}
@@ -551,10 +552,16 @@ async function run(){
     startPoll(v.id);
     let s = await api('/admin/videos/' + v.id + '/status');
     renderStatus(v.id, s);
+    async function step(path){
+      for (let i = 0; i < 3; i++) {
+        try { return await api(path, {method:'POST'}); }
+        catch (e) { if (i === 2) throw e; log('⚠ ' + e.message.slice(0, 80) + ' → 自動重試 ' + (i+1) + '/2'); }
+      }
+    }
     if (v.mode === 'gemini' || s.stage === 'gemini') {
-      while (s.stage !== 'done') { s = await api('/admin/videos/' + v.id + '/gemini', {method:'POST'}); renderStatus(v.id, s); }
+      while (s.stage !== 'done') { s = await step('/admin/videos/' + v.id + '/gemini'); renderStatus(v.id, s); }
     } else if (s.stage !== 'done') {
-      while (s.done_batches < s.batches) { s = await api('/admin/videos/' + v.id + '/translate', {method:'POST'}); renderStatus(v.id, s); }
+      while (s.done_batches < s.batches) { s = await step('/admin/videos/' + v.id + '/translate'); renderStatus(v.id, s); }
       s = await api('/admin/videos/' + v.id + '/finalize', {method:'POST'});
       renderStatus(v.id, s);
     }
