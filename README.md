@@ -202,19 +202,32 @@ npx wrangler deploy
 
 本地開發:`cd worker && npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
 
-**推薦:直接連 GitHub 自動部署(Workers Builds,跟 Pages 連 repo 同一套):**
+**推薦:直接連 GitHub 自動部署(Workers Builds)——現況:已連為 `kvsplayer`**
 
-1. **建 R2**(一次性):Dashboard → R2 → Create bucket `ytpoc-krsub`
-2. Workers & Pages → Create → **Worker** → **Import a repository** →
-   選 `clarencechien/ytpoc` → **Root directory 填 `worker`**(monorepo 關鍵,
-   它會自動讀到 `worker/wrangler.toml`)→ 分支選你要跟的分支 → Deploy
-3. 部署一次後到 Worker → Settings → Variables and Secrets →
-   加 **Secret** `GEMINI_API_KEY`(先 `dummy`,拿到真 key 同處換掉;
-   secret 不在 git 裡,只能 Dashboard 設)
-4. 掛 Access、R2 開公開讀:同下方步驟
+單一 worker `kvsplayer` 同時服務三種東西(已實測):
 
-之後每次 push 到該分支,worker 自動重建部署——AI 這邊改完推上去,你那邊就是新版。
-(明文變數 `ALLOWED_EMAIL` 等已寫在 `worker/wrangler.toml`,隨 git 部署,不用手設。)
+| 路徑 | 內容 | 權限 |
+|---|---|---|
+| `/` | 播放頁(`public/` 靜態資產) | 公開 |
+| `/list`、`/cues/<id>` | 影片清單 / 成品字幕 JSON(R2) | 公開 |
+| `/admin`、`/videos*` | 提交與 pipeline API | Access(Google SSO)+ email allowlist |
+
+Dashboard 設定(git 連動已存在,剩這些):
+
+1. **建 R2 bucket `ytpoc-krsub`**(一次性;bucket 不存在 deploy 會失敗)
+2. Build 設定:Path=`worker`、Deploy command=`npx wrangler deploy`(你已設好);
+   **production branch 設為本分支**(或 PR 合併後改 `main`),否則 push 不會佈到正式
+3. Settings → Variables and Secrets → **Secret** `GEMINI_API_KEY`(先 `dummy`,後換真 key)
+4. **掛 Access(只鎖寫入面)**:Zero Trust → Access → Applications → Add(Self-hosted),
+   加兩條 domain+path:`kvsplayer.sw-tech.workers.dev/admin` 與
+   `kvsplayer.sw-tech.workers.dev/videos`,policy Allow → Emails = 你的 Gmail。
+   播放頁與 /cues 不要放進 Access,保持公開
+5. Deployments → Retry(或等下一次 push 觸發)
+
+之後每次 push 到該分支,worker 自動重建部署。明文變數已在 `worker/wrangler.toml`。
+**注意**:`wrangler.toml` 的 `name` 必須與 Dashboard worker 同名(現為 `kvsplayer`),
+不同名會佈成另一個 worker 或失敗——這就是初次部署「只有 html」的原因。
+不再需要開 r2.dev 公開讀:公開資料改由 worker 的 `/list`、`/cues/<id>` 供應。
 
 **備援:純 Dashboard 手動貼碼(worker 是單檔零依賴,可直接貼):**
 
