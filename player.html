@@ -96,7 +96,7 @@
 <body>
 <header>
   <h1>나영석 VS 막내PD・第1話幕後</h1>
-  <span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・build a73fbd8</span>
+  <span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・build dc9d459</span>
   <div class="controls">
     <button id="btnMode">字幕:韓+中</button>
     <button id="btnCard" class="on">字卡:畫面上</button>
@@ -158,7 +158,13 @@ async function showIndex() {
       d.className = "row";
       d.innerHTML = '<span class="zh"></span><span class="ko"></span>';
       d.querySelector(".zh").textContent = v.title || v.id;
-      d.querySelector(".ko").textContent = v.cues + " cues";
+      const ko = d.querySelector(".ko");
+      ko.textContent = v.cues + " cues・" + v.id + "・";
+      const a = document.createElement("a");
+      a.href = "https://youtu.be/" + v.id; a.target = "_blank";
+      a.textContent = "YouTube ↗"; a.style.color = "var(--ko)";
+      a.onclick = e => e.stopPropagation();
+      ko.appendChild(a);
       d.onclick = () => location.search = "?v=" + v.id;
       list.appendChild(d);
     }
