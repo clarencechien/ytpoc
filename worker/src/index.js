@@ -38,6 +38,12 @@ export default {
         return j({ error: "forbidden: Access login required" }, 403);
 
       if (p === "/admin" && req.method === "GET") return adminPage();
+      if (p === "/admin/models" && req.method === "GET") {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${env.GEMINI_API_KEY}&pageSize=50`);
+        const d = await r.json();
+        return j({ current: env.GEMINI_MODEL,
+                   available: (d.models || []).map(x => x.name.replace("models/", "")) });
+      }
       if (p === "/admin/videos" && req.method === "POST") return await createVideo(req, env);
       if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/status$/)) && req.method === "GET")
         return await getStatus(m[1], env);

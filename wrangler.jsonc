@@ -18,8 +18,8 @@
   "vars": {
     // Cloudflare Access 驗證後注入的 email 必須等於此值才允許寫入
     "ALLOWED_EMAIL": "clarence.chien@gmail.com",
-    // 要換模型改這裡(gemini-3.5-flash 不存在,會 404)
-    "GEMINI_MODEL": "gemini-2.5-flash",
+    // 要換模型改這裡;可開 /admin/models 查你的 key 可用的模型清單
+    "GEMINI_MODEL": "gemini-3.5-flash",
     "BATCH_SIZE": "60"
   }
 
