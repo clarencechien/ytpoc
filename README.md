@@ -50,6 +50,29 @@ python -m http.server 8000
 
 (`file://` 直開會因 IFrame API origin 限制失效。)
 
+### Cloudflare Pages 快速佈版(preview)
+
+`public/` 資料夾就是完整可部署的靜態站(`index.html` = player,字幕 JSON 已內嵌,
+另附 `zh.srt` / `zh.ass` 下載)。三種方式擇一:
+
+**方式 1:Dashboard 直接拖上傳(最快)**
+1. [Cloudflare Dashboard](https://dash.cloudflare.com) → Workers & Pages → Create → Pages → **Upload assets**
+2. 取個專案名(如 `ytpoc-krsub`),把 repo 裡的 `public/` 資料夾整個拖進去 → Deploy
+3. 完成後開 `https://<專案名>.pages.dev` 即可播放驗收
+
+**方式 2:wrangler CLI**
+```bash
+npx wrangler pages deploy public --project-name=ytpoc-krsub
+```
+
+**方式 3:連 GitHub 自動佈版**
+1. Dashboard → Workers & Pages → Create → Pages → **Connect to Git**,選本 repo 與分支
+2. Build settings:Framework preset 選 **None**,Build command 留空,
+   **Build output directory 填 `public`**
+3. 之後每次 push 該分支就自動重佈
+
+注意:player 用 YouTube IFrame API 嵌原影片(不動影片檔),部署到 Pages 的 https 網域即可正常播放。
+
 ### ffmpeg 燒錄(需自備影片檔,sandbox 內無法下載)
 
 ```bash
@@ -75,7 +98,8 @@ ffmpeg -i video.mp4 -vf "subtitles=output/zh.ass" -c:a copy burned.mp4
 ├── scripts/          # A0–A4 pipeline(python,可重跑)
 ├── cues/             # 中間產物(對齊後 cues、翻譯後 cues)
 ├── glossary.json     # 譯名表(ko → zh-TW)
-├── output/           # zh.srt / zh.ass / asr_fixes.log
-├── player.html       # 最終交付物
+├── output/           # zh.srt / zh.ass / meta.zh.json / asr_fixes.log
+├── public/           # Cloudflare Pages 可直接部署的 preview(index.html + srt/ass)
+├── player.html       # 最終交付物(單檔版)
 └── HANDOFF.md        # 原始交接文件
 ```

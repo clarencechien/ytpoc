@@ -16,5 +16,21 @@ payload = payload.replace("</", "<\\/")
 
 tpl = (ROOT / "scripts/player_template.html").read_text()
 assert "__CUES_JSON__" in tpl
-(ROOT / "player.html").write_text(tpl.replace("__CUES_JSON__", payload), encoding="utf-8")
-print(f"player.html written, {len(slim)} cues, {len(payload)//1024} KB payload")
+html = tpl.replace("__CUES_JSON__", payload)
+(ROOT / "player.html").write_text(html, encoding="utf-8")
+
+# Cloudflare Pages preview:public/ 整包可直接部署
+pub = ROOT / "public"
+pub.mkdir(exist_ok=True)
+# public 版在 meta 列加 srt/ass 下載連結(與 index.html 同層)
+pub_html = html.replace(
+    '<span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC</span>',
+    '<span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・'
+    '<a href="zh.srt" download style="color:#8b93a5">下載 SRT</a>・'
+    '<a href="zh.ass" download style="color:#8b93a5">下載 ASS</a></span>')
+(pub / "index.html").write_text(pub_html, encoding="utf-8")
+for f in ["zh.srt", "zh.ass", "meta.zh.json"]:
+    src = ROOT / "output" / f
+    if src.exists():
+        (pub / f).write_text(src.read_text(), encoding="utf-8")
+print(f"player.html + public/ written, {len(slim)} cues, {len(payload)//1024} KB payload")
