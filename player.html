@@ -47,14 +47,26 @@
   }
   @keyframes pop { from { transform: translateY(-6px); opacity: 0; } }
 
-  /* 對話字幕帶 */
+  /* 對話字幕帶(固定高度:韓文 1 行 + 中文 2 行,換行不得改變版面高度) */
   #subBand {
     background: rgba(10,12,16,.92); border-top: 1px solid var(--line);
-    padding: 10px 18px 14px; text-align: center; min-height: 84px;
+    padding: 8px 18px 10px; text-align: center; flex: none;
   }
-  #subKo { color: var(--ko); font-size: clamp(12px, 1.4vw, 15px); min-height: 1.3em; opacity: .85; }
-  #subZh { font-size: clamp(18px, 2.6vw, 28px); font-weight: 600; line-height: 1.4; white-space: pre-line; }
+  #subKo {
+    color: var(--ko); font-size: clamp(12px, 1.4vw, 15px); opacity: .85;
+    height: 1.35em; line-height: 1.35; overflow: hidden;
+  }
+  #subZh {
+    font-size: clamp(18px, 2.6vw, 28px); font-weight: 600; line-height: 1.4;
+    white-space: pre-line; height: 2.8em; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
   #subZh .warn { color: var(--accent); }
+
+  /* 全螢幕:整個 stage(影片+字卡+字幕帶)進 fullscreen,字幕照常顯示 */
+  .stage:fullscreen { background: #000; }
+  .stage:fullscreen .video-wrap { flex: 1; aspect-ratio: auto; }
+  .stage:fullscreen #subBand { background: rgba(10,12,16,.85); border-top: 0; }
 
   /* transcript */
   aside {
@@ -88,6 +100,7 @@
     <button id="btnMode">字幕:韓+中</button>
     <button id="btnCard" class="on">字卡:畫面上</button>
     <button id="btnFollow" class="on">跟隨捲動</button>
+    <button id="btnFull">⛶ 全螢幕</button>
   </div>
 </header>
 <main>
@@ -158,7 +171,7 @@ function activeAt(arr, t) {
 const subKo = document.getElementById("subKo");
 const subZh = document.getElementById("subZh");
 const cardLayer = document.getElementById("cardLayer");
-let lastKey = "";
+let lastBandKey = "", lastCardKey = "";
 
 setInterval(() => {
   if (!yt || !yt.getCurrentTime) return;
@@ -166,9 +179,10 @@ setInterval(() => {
 
   const sp = activeAt(speech, t);
   const cd = activeAt(cards, t);
-  const key = sp.map(c=>c.id).join(",") + "|" + cd.map(c=>c.id).join(",") + "|" + mode + cardMode;
-  if (key === lastKey) return;
-  lastKey = key;
+  const bandKey = sp.map(c=>c.id).join(",") + "|" + cd.map(c=>c.id).join(",") + "|" + mode + cardMode;
+  const cardKey = cd.map(c=>c.id).join(",") + "|" + cardMode;
+  if (bandKey === lastBandKey) return;
+  lastBandKey = bandKey;
 
   // 字幕帶
   const cur = sp[sp.length - 1];
@@ -184,14 +198,17 @@ setInterval(() => {
       cd.map(c => "【" + c.zh.replace(/\n/g," ") + "】").join(" ");
   }
 
-  // 畫面字卡層
-  cardLayer.innerHTML = "";
-  if (cardMode === 0) {
-    for (const c of cd) {
-      const chip = document.createElement("div");
-      chip.className = "card-chip";
-      chip.textContent = c.zh;
-      cardLayer.appendChild(chip);
+  // 畫面字卡層(只在字卡組合變化時重建,避免對話換行觸發閃動)
+  if (cardKey !== lastCardKey) {
+    lastCardKey = cardKey;
+    cardLayer.innerHTML = "";
+    if (cardMode === 0) {
+      for (const c of cd) {
+        const chip = document.createElement("div");
+        chip.className = "card-chip";
+        chip.textContent = c.zh;
+        cardLayer.appendChild(chip);
+      }
     }
   }
 
@@ -222,6 +239,20 @@ btnFollow.onclick = () => {
   follow = !follow;
   btnFollow.classList.toggle("on", follow);
 };
+// 全螢幕:fullscreen 整個 stage(含字幕帶與字卡層),而非 YouTube 原生全螢幕
+const btnFull = document.getElementById("btnFull");
+const stage = document.querySelector(".stage");
+btnFull.onclick = () => {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else {
+    (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
+  }
+};
+document.addEventListener("fullscreenchange", () => {
+  btnFull.classList.toggle("on", !!document.fullscreenElement);
+  btnFull.textContent = document.fullscreenElement ? "⛶ 離開全螢幕" : "⛶ 全螢幕";
+});
 </script>
 </body>
 </html>
