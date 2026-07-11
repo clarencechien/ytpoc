@@ -47,26 +47,27 @@
   }
   @keyframes pop { from { transform: translateY(-6px); opacity: 0; } }
 
-  /* 對話字幕帶(固定高度:韓文 1 行 + 中文 2 行,換行不得改變版面高度) */
+  /* 對話字幕:透明疊在影片底部,不佔版面 → 行數變化不會擠動 iframe、不會裁切 */
   #subBand {
-    background: rgba(10,12,16,.92); border-top: 1px solid var(--line);
-    padding: 8px 18px 10px; text-align: center; flex: none;
+    position: absolute; left: 0; right: 0; bottom: 7%;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 0 4%; pointer-events: none; z-index: 6; text-align: center;
   }
-  #subKo {
-    color: var(--ko); font-size: clamp(12px, 1.4vw, 15px); opacity: .85;
-    height: 1.35em; line-height: 1.35; overflow: hidden;
+  #subKo, #subZh {
+    width: fit-content; max-width: 92%;
+    background: rgba(8,10,14,.72); border-radius: .4em; padding: .1em .55em;
   }
+  #subKo:empty, #subZh:empty { display: none; }
+  #subKo { color: var(--ko); font-size: clamp(12px, 1.4vw, 16px); line-height: 1.35; }
   #subZh {
-    font-size: clamp(18px, 2.6vw, 28px); font-weight: 600; line-height: 1.4;
-    white-space: pre-line; height: 2.8em; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
+    font-size: clamp(18px, 2.6vw, 30px); font-weight: 600; line-height: 1.4;
+    white-space: pre-line; text-shadow: 0 1px 2px rgba(0,0,0,.8);
   }
   #subZh .warn { color: var(--accent); }
 
-  /* 全螢幕:整個 stage(影片+字卡+字幕帶)進 fullscreen,字幕照常顯示 */
+  /* 全螢幕:整個 stage 進 fullscreen,字幕/字卡本來就疊在影片上,照常顯示 */
   .stage:fullscreen { background: #000; }
   .stage:fullscreen .video-wrap { flex: 1; aspect-ratio: auto; }
-  .stage:fullscreen #subBand { background: rgba(10,12,16,.85); border-top: 0; }
 
   /* transcript */
   aside {
@@ -108,8 +109,8 @@
     <div class="video-wrap">
       <div id="player"></div>
       <div id="cardLayer"></div>
+      <div id="subBand"><div id="subKo"></div><div id="subZh"></div></div>
     </div>
-    <div id="subBand"><div id="subKo"></div><div id="subZh"></div></div>
   </div>
   <aside>
     <div class="head">逐句稿(點擊跳轉)・🃏 = 畫面字卡</div>
