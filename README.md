@@ -202,9 +202,25 @@ npx wrangler deploy
 
 本地開發:`cd worker && npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
 
-**推薦:直接連 GitHub 自動部署(Workers Builds)——現況:已連為 `kvsplayer`**
+**Cloudflare 重建指南(從零開始,約 5 分鐘)**
 
-單一 worker `kvsplayer` 同時服務三種東西(已實測):
+設定檔是 repo 根目錄的 **`wrangler.jsonc`**(唯一設定檔;之前卡關就是因為
+Cloudflare 匯入時自動 commit 了一個 assets-only 的 wrangler.jsonc,優先序又比
+wrangler.toml 高,把完整設定整個遮蔽)。現在 jsonc 就是完整設定,匯入即用。
+
+1. **刪舊 worker**(若存在):Workers & Pages → kvsplayer → Settings → Delete
+2. **建 R2 bucket**:R2 → Create bucket → 名稱 `kvs-krsub`(一字不差)
+3. **匯入 repo**:Workers & Pages → Create → Worker → **Import a repository** →
+   選 `clarencechien/ytpoc`、branch `main`。**什麼都不用改**:名稱會自動預填
+   `kvsplayer`(讀自 wrangler.jsonc),不用設 Path、不用改指令 → Deploy
+4. **設 Secret**:worker → Settings → Variables and Secrets → 加 **Secret**
+   `GEMINI_API_KEY`(先填 `dummy`,拿到 [AI Studio](https://aistudio.google.com/apikey)
+   真 key 後同處替換)
+5. **掛 Access(只鎖寫入面)**:Zero Trust → Access → Applications →
+   Add(Self-hosted)→ 兩條 domain+path:`<worker網域>/admin` 與 `<worker網域>/videos`,
+   policy Allow → Emails = 你的 Gmail(Google 登入)
+
+單一 worker 服務三種路徑(全部已本地實測):
 
 | 路徑 | 內容 | 權限 |
 |---|---|---|
@@ -212,37 +228,14 @@ npx wrangler deploy
 | `/list`、`/cues/<id>` | 影片清單 / 成品字幕 JSON(R2) | 公開 |
 | `/admin`、`/videos*` | 提交與 pipeline API | Access(Google SSO)+ email allowlist |
 
-Dashboard 設定(git 連動已存在,剩這些):
+**部署成功的判準**:`/list` 回 `[]`(JSON)。`/` 只是靜態頁,不能證明 worker 活著。
 
-1. **建 R2 bucket `ytpoc-krsub`**(一次性;bucket 不存在 deploy 會失敗)
-2. Build 設定:Path=`worker`、Deploy command=`npx wrangler deploy`(你已設好);
-   **production branch 設為本分支**(或 PR 合併後改 `main`),否則 push 不會佈到正式
-3. Settings → Variables and Secrets → **Secret** `GEMINI_API_KEY`(先 `dummy`,後換真 key)
-4. **掛 Access(只鎖寫入面)**:Zero Trust → Access → Applications → Add(Self-hosted),
-   加兩條 domain+path:`kvsplayer.sw-tech.workers.dev/admin` 與
-   `kvsplayer.sw-tech.workers.dev/videos`,policy Allow → Emails = 你的 Gmail。
-   播放頁與 /cues 不要放進 Access,保持公開
-5. Deployments → Retry(或等下一次 push 觸發)
+之後每次 push `main`,自動重建部署。注意事項:
+- **不要再新增 `wrangler.toml`**——jsonc 優先序更高,兩個並存必出影子設定事故
+- `name` 改名時,Dashboard 的 worker 名稱要跟著一致,否則會佈成另一個 worker
+- 換模型改 `wrangler.jsonc` 的 `GEMINI_MODEL`(需為有效 model id)
 
-之後每次 push 到該分支,worker 自動重建部署。明文變數已在 `worker/wrangler.toml`。
-**注意**:`wrangler.toml` 的 `name` 必須與 Dashboard worker 同名(現為 `kvsplayer`),
-不同名會佈成另一個 worker 或失敗——這就是初次部署「只有 html」的原因。
-不再需要開 r2.dev 公開讀:公開資料改由 worker 的 `/list`、`/cues/<id>` 供應。
-
-**備援:純 Dashboard 手動貼碼(worker 是單檔零依賴,可直接貼):**
-
-1. **建 R2**:Dashboard → R2 → Create bucket,名稱 `ytpoc-krsub`
-2. **建 Worker**:Workers & Pages → Create → Worker(Hello World 範本),
-   名稱 `ytpoc-admin` → Deploy → **Edit code** → 全選刪掉,
-   把 `worker/src/index.js` 整檔內容貼上 → Deploy
-3. **綁 R2**:Worker → Settings → **Bindings** → Add → R2 bucket →
-   Variable name 填 `STORE`、bucket 選 `ytpoc-krsub`
-4. **設變數**(Settings → Variables and Secrets):
-   - Plaintext:`ALLOWED_EMAIL` = 你的 Gmail、`GEMINI_MODEL` = `gemini-2.5-flash`、`BATCH_SIZE` = `60`
-   - **Secret**:`GEMINI_API_KEY` = 先填 `dummy`,拿到 AI Studio key 後同一處編輯換掉
-5. 掛 Access 與開 R2 公開讀:同上面 Dashboard 步驟 2、3
-
-(若之後想改用 CLI:wrangler 不用安裝,有 Node 的機器 `npx wrangler ...` 會自動下載執行。)
+本地開發:repo 根目錄 `npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
 
 ### 剩餘工作
 
