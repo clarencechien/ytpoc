@@ -75,6 +75,14 @@ async function createVideo(req, env) {
   const id = (body.url || "").match(/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/)?.[1];
   if (!id) return j({ error: "無法從 URL 解析 video id" }, 400);
 
+  // 斷點續跑:影片已建立且沒重新提供原料 → 跳過抓軌,直接回狀態接著跑
+  const existing = await getJSON(env, `videos/${id}/status.json`);
+  if (existing && !body.ko_json3 && !body.en_vtt) {
+    if (existing.stage === "gemini")
+      return j({ id, mode: "gemini", segments: existing.segments, resumed: true });
+    return j({ id, cues: existing.cues, resumed: true });
+  }
+
   // 沒手貼原料:先試抓字幕軌;YouTube 擋 IP 就退 Gemini 看片(路線B,需片長)
   let source = "manual";
   if (!body.ko_json3 && !body.en_vtt) {
