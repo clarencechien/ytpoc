@@ -38,12 +38,12 @@ export default {
         return j({ error: "forbidden: Access login required" }, 403);
 
       if (p === "/admin" && req.method === "GET") return adminPage();
-      if (p === "/videos" && req.method === "POST") return await createVideo(req, env);
-      if ((m = p.match(/^\/videos\/([\w-]{11})\/status$/)) && req.method === "GET")
+      if (p === "/admin/videos" && req.method === "POST") return await createVideo(req, env);
+      if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/status$/)) && req.method === "GET")
         return await getStatus(m[1], env);
-      if ((m = p.match(/^\/videos\/([\w-]{11})\/translate$/)) && req.method === "POST")
+      if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/translate$/)) && req.method === "POST")
         return await translateNextBatch(m[1], env);
-      if ((m = p.match(/^\/videos\/([\w-]{11})\/finalize$/)) && req.method === "POST")
+      if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/finalize$/)) && req.method === "POST")
         return await finalize(m[1], env);
       return j({ error: "not found" }, 404);
     } catch (e) {
@@ -262,12 +262,12 @@ async function run(){
   try{
     const body = { url: url.value, title: title.value,
       ko_json3: json3.value || undefined, en_vtt: vtt.value || undefined };
-    const v = await api('/videos', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)});
+    const v = await api('/admin/videos', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)});
     log('建立 ' + v.id + ',' + v.cues + ' cues');
     let s;
-    do { s = await api('/videos/' + v.id + '/translate', {method:'POST'});
+    do { s = await api('/admin/videos/' + v.id + '/translate', {method:'POST'});
          log('批次 ' + s.done_batches + '/' + s.batches); } while(s.done_batches < s.batches);
-    const f = await api('/videos/' + v.id + '/finalize', {method:'POST'});
+    const f = await api('/admin/videos/' + v.id + '/finalize', {method:'POST'});
     log('完成:' + JSON.stringify(f));
   }catch(e){ log('錯誤:' + e.message); }
 }
