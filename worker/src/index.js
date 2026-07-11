@@ -53,7 +53,9 @@ export default {
           if (!s) return null;
           const total = s.segments || s.batches || 1;
           const done = s.stage === "done" ? total : (s.done_segments ?? s.done_batches ?? 0);
-          return { id, title: mt?.title || id, stage: s.stage, done, total, cues: s.cues || 0 };
+          return { id, title: mt?.title || id, stage: s.stage, done, total, cues: s.cues || 0,
+                   last_error: s.last_error || null,
+                   stalled: s.stage !== "done" && s.queued_at && Date.now() - s.queued_at > 300000 };
         }));
         return j(jobs.filter(Boolean));
       }
@@ -83,10 +85,17 @@ export default {
         else if (status.done_batches < status.batches) s = await (await translateNextBatch(id, env)).json();
         else s = await (await finalize(id, env)).json();
         if (s.error) throw new Error(s.error);
+        if (status.last_error) {
+          const s2 = await getJSON(env, `videos/${id}/status.json`);
+          if (s2) { delete s2.last_error; delete s2.last_error_at; await putJSON(env, `videos/${id}/status.json`, s2); }
+        }
         if (s.stage !== "done") await env.JOBS.send({ id });
         msg.ack();
       } catch (e) {
-        msg.retry({ delaySeconds: 30 }); // 524/截斷等暫時錯誤交給 Queues 退避重試
+        status.last_error = String(e.message || e).slice(0, 300);
+        status.last_error_at = new Date().toISOString();
+        await putJSON(env, `videos/${id}/status.json`, status);
+        msg.retry({ delaySeconds: 30 }); // 暫時錯誤交給 Queues 退避;8 次耗盡後鏈會斷,用「重排」救
       }
     }
   },
@@ -667,6 +676,19 @@ async function refreshJobs(){
       row.innerHTML = '<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span style="flex-shrink:0">' + badge + '</span></div>'
         + '<div class="bar" style="margin-top:6px"><div style="height:100%;width:' + pct + '%;background:' + (jb.stage === 'done' ? 'var(--ok)' : 'var(--acc)') + '"></div></div>';
       row.querySelector('span').textContent = jb.title;
+      if (jb.stage !== 'done' && (jb.last_error || jb.stalled)) {
+        const err = document.createElement('div');
+        err.style.cssText = 'color:var(--err);font-size:12px;margin-top:5px;white-space:pre-wrap';
+        err.textContent = (jb.last_error ? '最後錯誤:' + jb.last_error : '⚠ 超過 5 分鐘沒進度,鏈可能已斷');
+        const rq = document.createElement('button');
+        rq.textContent = '重排'; rq.style.cssText = 'margin-left:8px;padding:.15em .8em;font-size:12px';
+        rq.onclick = async () => { rq.disabled = true;
+          try { await api('/admin/videos', {method:'POST', headers:{'content-type':'application/json'},
+            body: JSON.stringify({url: 'https://youtu.be/' + jb.id})}); log('已重排 ' + jb.id, 'ok'); }
+          catch (e) { log('重排失敗:' + e.message, 'err'); } rq.disabled = false; };
+        err.appendChild(rq);
+        row.appendChild(err);
+      }
       el.appendChild(row);
     }
   } catch (e) {}
