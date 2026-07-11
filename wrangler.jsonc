@@ -1,14 +1,28 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ytpoc",
+  // 唯一的 Cloudflare 設定檔(jsonc 優先序最高,勿再新增 wrangler.toml 以免互搶)。
+  // name 必須與 Dashboard 上的 Worker 同名。
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "kvsplayer",
+  "main": "worker/src/index.js",
   "compatibility_date": "2026-07-11",
-  "observability": {
-    "enabled": true
-  },
-  "assets": {
-    "directory": "public"
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // 靜態資產:public/(播放頁)。命中資產直接回檔;
+  // /admin /videos /cues /list 無對應檔案 → 進 worker 程式。
+  "assets": { "directory": "public" },
+
+  // R2:唯一儲存層(無 D1)。bucket 要先建好(R2 → Create bucket → kvs-krsub)。
+  "r2_buckets": [{ "binding": "STORE", "bucket_name": "kvs-krsub" }],
+
+  "vars": {
+    // Cloudflare Access 驗證後注入的 email 必須等於此值才允許寫入
+    "ALLOWED_EMAIL": "clarence.chien@gmail.com",
+    // 要換模型改這裡(gemini-3.5-flash 不存在,會 404)
+    "GEMINI_MODEL": "gemini-2.5-flash",
+    "BATCH_SIZE": "60"
+  }
+
+  // 機密(不進 repo):Dashboard → Worker → Settings → Variables and Secrets
+  //   GEMINI_API_KEY = <先填 dummy,拿到 AI Studio 真 key 後同處替換>
 }
