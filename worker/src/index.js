@@ -183,22 +183,62 @@ async function getStatus(id, env) {
 // ---------- 自動抓 YouTube 字幕軌(innertube player API) ----------
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+// 依序嘗試多個 innertube client:datacenter IP 常被 WEB client 丟
+// LOGIN_REQUIRED bot check,但 TV 內嵌/行動 client 的檢查寬鬆許多。
+const YT_CLIENTS = [
+  {
+    label: "tv_embedded",
+    ua: UA,
+    body: {
+      context: {
+        client: { clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", clientVersion: "2.0", hl: "en" },
+        thirdParty: { embedUrl: "https://www.youtube.com/" },
+      },
+    },
+  },
+  {
+    label: "android",
+    ua: "com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip",
+    body: {
+      context: {
+        client: { clientName: "ANDROID", clientVersion: "19.09.37", androidSdkVersion: 34, hl: "en" },
+      },
+    },
+  },
+  {
+    label: "ios",
+    ua: "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 17_0 like Mac OS X)",
+    body: {
+      context: {
+        client: { clientName: "IOS", clientVersion: "19.09.3", deviceModel: "iPhone14,3", hl: "en" },
+      },
+    },
+  },
+  {
+    label: "web",
+    ua: UA,
+    body: { context: { client: { clientName: "WEB", clientVersion: "2.20260701.00.00", hl: "en" } } },
+  },
+];
+
 async function fetchCaptions(id) {
-  const r = await fetch(
-    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-    {
+  const attempts = [];
+  let d = null;
+  for (const c of YT_CLIENTS) {
+    const r = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
-      headers: { "content-type": "application/json", "user-agent": UA, "origin": "https://www.youtube.com" },
-      body: JSON.stringify({
-        videoId: id,
-        context: { client: { clientName: "WEB", clientVersion: "2.20260701.00.00", hl: "en" } },
-      }),
+      headers: { "content-type": "application/json", "user-agent": c.ua, "origin": "https://www.youtube.com" },
+      body: JSON.stringify({ videoId: id, ...c.body }),
     });
-  if (!r.ok) throw new Error(`YouTube innertube ${r.status}(可能擋了 Cloudflare IP)——請手動貼上字幕原料`);
-  const d = await r.json();
-  const ps = d.playabilityStatus?.status;
-  if (ps && ps !== "OK")
-    throw new Error(`影片不可用:${ps} ${d.playabilityStatus?.reason || ""}`);
+    if (!r.ok) { attempts.push(`${c.label}:http${r.status}`); continue; }
+    const res = await r.json();
+    const ps = res.playabilityStatus?.status;
+    const hasTracks = res.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length;
+    if (hasTracks) { d = res; attempts.push(`${c.label}:OK`); break; }
+    attempts.push(`${c.label}:${ps || "no-captions"}`);
+  }
+  if (!d)
+    throw new Error(`各 client 都抓不到字幕軌(${attempts.join(", ")})——YouTube 擋了 Cloudflare IP 或影片無字幕,請手動貼上 json3/vtt`);
   const tracks = d.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
   const names = tracks.map(t => `${t.languageCode}${t.kind === "asr" ? "(asr)" : ""}`);
   // ko:人工優先、退 ASR;en:僅取人工(ASR 英譯無字卡慣例、參考價值低)
