@@ -1,0 +1,135 @@
+[
+ {
+  "ko": "나영석",
+  "en": "Nah Yung Suk",
+  "zh": "羅英錫",
+  "note": "台灣媒體慣用譯名;製作人",
+  "source": "info.json title"
+ },
+ {
+  "ko": "나PD",
+  "en": "Producer Nah",
+  "zh": "羅PD",
+  "note": "通行暱稱,PD 保留不譯",
+  "source": "tags"
+ },
+ {
+  "ko": "막내PD",
+  "en": "Junior Producer",
+  "zh": "忙內PD",
+  "note": "韓綜圈慣用「忙內」=老么;節目對戰主軸",
+  "source": "title"
+ },
+ {
+  "ko": "천지인",
+  "en": "Cheon Ji In",
+  "zh": "千智仁",
+  "note": "音譯,名字與「天地人」諧音;待確認 ⚠",
+  "source": "en.vtt #129"
+ },
+ {
+  "ko": "카리나",
+  "en": "KARINA",
+  "zh": "Karina",
+  "note": "aespa 隊長,台媒慣用英文藝名",
+  "source": "tags/description"
+ },
+ {
+  "ko": "지민",
+  "en": "Ji Min",
+  "zh": "智敏",
+  "note": "Karina 本名柳智敏;世界觀設定中的「21歲智敏」",
+  "source": "en.vtt #2"
+ },
+ {
+  "ko": "에스파",
+  "en": "aespa",
+  "zh": "aespa",
+  "note": "團名不譯",
+  "source": "description"
+ },
+ {
+  "ko": "채널 십오야",
+  "en": "Channel 15ya",
+  "zh": "頻道十五夜",
+  "note": "羅英錫 YouTube 頻道,台灣慣稱",
+  "source": "en.vtt #0"
+ },
+ {
+  "ko": "에그이즈커밍",
+  "en": "eggiscoming",
+  "zh": "Egg Is Coming",
+  "note": "羅英錫所屬製作公司,保留英文",
+  "source": "en.vtt #8"
+ },
+ {
+  "ko": "제미나이",
+  "en": "Gemini",
+  "zh": "Gemini",
+  "note": "Google AI,產品名不譯",
+  "source": "description"
+ },
+ {
+  "ko": "맷돌 갈라",
+  "en": "Maetdol Gala",
+  "zh": "石磨 Gala",
+  "note": "맷돌=石磨,Met Gala 諧音哏,首次出現加註",
+  "source": "en.vtt #3"
+ },
+ {
+  "ko": "멧갈라",
+  "en": "Met Gala",
+  "zh": "Met Gala",
+  "note": "大都會慈善晚宴,通行不譯",
+  "source": "en.vtt #3"
+ },
+ {
+  "ko": "인간 맷돌",
+  "en": "Human Millstone",
+  "zh": "人肉石磨",
+  "note": "節目內玩笑稱號",
+  "source": "en.vtt #616"
+ },
+ {
+  "ko": "무한도전",
+  "en": "Infinite Challenge",
+  "zh": "《無限挑戰》",
+  "note": "MBC 綜藝,台灣通行譯名",
+  "source": "en.vtt #280"
+ },
+ {
+  "ko": "1박 2일",
+  "en": "2 Days & 1 Night",
+  "zh": "《兩天一夜》",
+  "note": "KBS 綜藝,羅英錫成名作",
+  "source": "en.vtt #280"
+ },
+ {
+  "ko": "정정헌",
+  "en": "Jeong Jeong Heon",
+  "zh": "鄭正憲",
+  "note": "工作人員(5年次/保鑣角色),音譯待確認 ⚠",
+  "source": "en.vtt #558"
+ },
+ {
+  "ko": "피디",
+  "en": "producer/PD",
+  "zh": "PD",
+  "note": "韓綜慣例保留 PD 不譯",
+  "source": "通用"
+ },
+ {
+  "ko": "세계관",
+  "en": "alternate world/universe",
+  "zh": "世界觀",
+  "note": "偶像企劃用語,aespa 世界觀設定",
+  "source": "en.vtt #212"
+ },
+ {
+  "ko": "나불나불",
+  "en": "Chattering with Nah",
+  "zh": "《喋喋不休》",
+  "note": "頻道十五夜的訪談節目;Karina 曾出演",
+  "source": "en.vtt #15"
+ }
+]
