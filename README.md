@@ -59,6 +59,16 @@ ffmpeg -i video.mp4 -vf "subtitles=output/zh.ass" -c:a copy burned.mp4
 
 `zh.ass` 已含字卡置頂/對話置底的樣式定義,燒錄後即為成品畫面。
 
+## 驗收狀態
+
+- [x] cues 時間軸單調、無重疊(1545 cues:對話 1059、字卡 486)
+- [x] 前 5 分鐘品質閘門(批次 00)抽查通過後才展開全片
+- [x] 全片翻譯完成,譯名零漂移(羅英錫/羅PD/Karina/忙內PD/石磨 Gala 一致性檢查通過)
+- [x] `player.html` 單檔、無框架、JS 語法檢查與 HTTP 服務煙霧測試通過
+- [x] `zh.srt` 標準格式;`zh.ass` 經 ffmpeg 實際渲染驗證(字卡置頂色塊、對話置底)
+- [x] 198 處 ASR 修正 + 48 個新譯名留痕於 `output/asr_fixes.log`;18 句標 `⚠` 待人工確認
+- [ ] 使用者本機瀏覽器視覺驗收(sandbox 無法連 YouTube,iframe 需本機開啟)
+
 ## Repo 結構
 
 ```
