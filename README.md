@@ -218,8 +218,9 @@ wrangler.toml 高,把完整設定整個遮蔽)。現在 jsonc 就是完整設定
 
 ### 剩餘工作
 
-1. 播放頁改吃 R2 cues.json + 影片清單頁(Pages)
-2. 自動抓字幕軌(timedtext 嘗試 → 失敗 fallback 手貼,admin 頁已支援手貼)
+1. 播放頁改吃 `/cues/<id>` + 影片清單頁(目前 `/` 仍是 v1 內嵌那集)
+2. ~~自動抓字幕軌~~ 已做:貼連結即自動抓(innertube;ko 人工優先退 ASR、
+   en 僅取人工);YouTube 若擋 Cloudflare IP 會回 422 並指引手貼 fallback
 3. 路線B(Gemini 看片)10 分鐘段 POC,驗時間戳與字卡辨識品質
 
 ## 社群化評估(v3 方向:限縮「YouTube 韓綜」)

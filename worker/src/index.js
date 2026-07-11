@@ -66,8 +66,18 @@ async function createVideo(req, env) {
   const body = await req.json();
   const id = (body.url || "").match(/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/)?.[1];
   if (!id) return j({ error: "無法從 URL 解析 video id" }, 400);
-  if (!body.ko_json3 && !body.en_vtt)
-    return j({ error: "目前需要至少一種字幕原料(ko_json3 或 en_vtt)" }, 400);
+
+  // 沒手貼原料就自動抓字幕軌;抓不到(無字幕/YouTube 擋 IP)回明確錯誤指引手貼
+  let source = "manual";
+  if (!body.ko_json3 && !body.en_vtt) {
+    const got = await fetchCaptions(id);
+    if (!got.ko_json3 && !got.en_vtt)
+      return j({ error: `自動抓不到可用字幕軌(tracks: ${got.tracks.join(", ") || "無"})。請手動貼上 json3/vtt。`, tracks: got.tracks }, 422);
+    body.ko_json3 = got.ko_json3 || undefined;
+    body.en_vtt = got.en_vtt || undefined;
+    body.title = body.title || got.title;
+    source = `auto(${got.tracks.join(",")})`;
+  }
 
   const words = body.ko_json3 ? parseJson3(body.ko_json3) : [];
   const enCues = body.en_vtt ? parseVtt(body.en_vtt) : [];
@@ -76,7 +86,7 @@ async function createVideo(req, env) {
 
   await putJSON(env, `videos/${id}/meta.json`, {
     id, url: `https://www.youtube.com/watch?v=${id}`,
-    title: body.title || id, created: new Date().toISOString(),
+    title: body.title || id, created: new Date().toISOString(), source,
   });
   await putJSON(env, `videos/${id}/aligned.json`, aligned);
   await putJSON(env, `videos/${id}/status.json`, {
@@ -170,6 +180,47 @@ async function getStatus(id, env) {
   return s ? j(s) : j({ error: "unknown video" }, 404);
 }
 
+// ---------- 自動抓 YouTube 字幕軌(innertube player API) ----------
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+async function fetchCaptions(id) {
+  const r = await fetch(
+    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": UA, "origin": "https://www.youtube.com" },
+      body: JSON.stringify({
+        videoId: id,
+        context: { client: { clientName: "WEB", clientVersion: "2.20260701.00.00", hl: "en" } },
+      }),
+    });
+  if (!r.ok) throw new Error(`YouTube innertube ${r.status}(可能擋了 Cloudflare IP)——請手動貼上字幕原料`);
+  const d = await r.json();
+  const ps = d.playabilityStatus?.status;
+  if (ps && ps !== "OK")
+    throw new Error(`影片不可用:${ps} ${d.playabilityStatus?.reason || ""}`);
+  const tracks = d.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+  const names = tracks.map(t => `${t.languageCode}${t.kind === "asr" ? "(asr)" : ""}`);
+  // ko:人工優先、退 ASR;en:僅取人工(ASR 英譯無字卡慣例、參考價值低)
+  const ko = tracks.find(t => t.languageCode?.startsWith("ko") && t.kind !== "asr")
+          || tracks.find(t => t.languageCode?.startsWith("ko"));
+  const en = tracks.find(t => t.languageCode?.startsWith("en") && t.kind !== "asr");
+  const grab = async (t, fmt) => {
+    if (!t) return null;
+    const u = t.baseUrl + (t.baseUrl.includes("?") ? "&" : "?") + "fmt=" + fmt;
+    const rr = await fetch(u, { headers: { "user-agent": UA } });
+    if (!rr.ok) return null;
+    const txt = await rr.text();
+    return txt.length > 50 ? txt : null;
+  };
+  return {
+    ko_json3: await grab(ko, "json3"),
+    en_vtt: await grab(en, "vtt"),
+    title: d.videoDetails?.title,
+    tracks: names,
+  };
+}
+
 // ---------- 解析/對齊(v1 python pipeline 的 JS 移植) ----------
 function parseJson3(raw) {
   const data = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -250,8 +301,8 @@ button{cursor:pointer;width:auto;padding:.5em 1.4em}#log{white-space:pre-wrap;fo
 <h2>ytpoc 個人版 admin</h2>
 <input id="url" placeholder="YouTube 連結">
 <input id="title" placeholder="標題(選填)">
-<textarea id="json3" rows="3" placeholder="貼上 ko json3 內容(yt-dlp --write-auto-subs --sub-format json3)"></textarea>
-<textarea id="vtt" rows="3" placeholder="貼上 en vtt 內容(有人工字幕時,品質最佳)"></textarea>
+<textarea id="json3" rows="3" placeholder="(選填)ko json3 內容——留空會自動抓字幕軌"></textarea>
+<textarea id="vtt" rows="3" placeholder="(選填)en vtt 內容——留空會自動抓;有人工英文字幕品質最佳"></textarea>
 <button onclick="run()">建立並全自動翻譯</button>
 <div id="log"></div>
 <script>
