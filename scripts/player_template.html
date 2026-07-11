@@ -118,66 +118,81 @@
   </aside>
 </main>
 <script>
-const CUES = __CUES_JSON__;
-const VIDEO_ID = "tFaHkZO587c";
-
-// 顯示模式
-let mode = 1;            // 0=中, 1=韓+中, 2=隱藏
-let cardMode = 0;        // 0=畫面上, 1=併入字幕帶, 2=隱藏
-let follow = true;
-
-const speech = CUES.filter(c => c.kind === "speech");
-const cards  = CUES.filter(c => c.kind === "card");
-
-// transcript 列表
-const list = document.getElementById("list");
+const EMBEDDED = __CUES_JSON__;   // 內嵌模式有值;動態模式為 null
+let mode = 1, cardMode = 0, follow = true;
+let yt = null, ytReady = false, pendingVid = null;
+let speech = [], cards = [];
 const rows = new Map();
-for (const c of CUES) {
-  const div = document.createElement("div");
-  div.className = "row" + (c.kind === "card" ? " card" : "");
-  const t = Math.floor(c.start);
-  const ts = `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`;
-  div.innerHTML = `<span class="t">${ts}</span>` +
-    (c.kind === "speech" && c.ko ? `<span class="ko"></span>` : "") +
-    `<span class="zh"></span>`;
-  if (c.kind === "speech" && c.ko) div.querySelector(".ko").textContent = c.ko;
-  div.querySelector(".zh").textContent = c.zh;
-  div.onclick = () => { if (yt && yt.seekTo) { yt.seekTo(c.start, true); yt.playVideo(); } };
-  list.appendChild(div);
-  rows.set(c.id, div);
-}
-
-// YouTube IFrame API
-let yt = null;
-const tag = document.createElement("script");
-tag.src = "https://www.youtube.com/iframe_api";
-document.head.appendChild(tag);
-window.onYouTubeIframeAPIReady = () => {
-  yt = new YT.Player("player", {
-    videoId: VIDEO_ID,
-    playerVars: { rel: 0, playsinline: 1, cc_load_policy: 0 },
-  });
-};
-
-// 依時間找目前 active 的 cues(排序後線性掃描 + 記憶指標,cue 數 1.5k 足夠快)
-function activeAt(arr, t) {
-  const out = [];
-  for (const c of arr) {
-    if (c.start > t) break;
-    if (t < c.end) out.push(c);
-  }
-  return out;
-}
-
+const list = document.getElementById("list");
 const subKo = document.getElementById("subKo");
 const subZh = document.getElementById("subZh");
 const cardLayer = document.getElementById("cardLayer");
 let lastBandKey = "", lastCardKey = "";
 
+const tag = document.createElement("script");
+tag.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+window.onYouTubeIframeAPIReady = () => { ytReady = true; if (pendingVid) createYT(pendingVid); };
+function createYT(v) {
+  yt = new YT.Player("player", { videoId: v, playerVars: { rel: 0, playsinline: 1, cc_load_policy: 0 } });
+}
+
+async function boot() {
+  const vid = new URLSearchParams(location.search).get("v");
+  if (EMBEDDED && !vid) return initPlayer("tFaHkZO587c", EMBEDDED);
+  if (vid) {
+    let r = await fetch("/cues/" + vid);
+    if (!r.ok) r = await fetch("/cues-" + vid + ".json");
+    if (r.ok) return initPlayer(vid, await r.json());
+    list.innerHTML = '<div class="row">找不到 ' + vid + ' 的字幕,回清單:</div>';
+  }
+  showIndex();
+}
+
+async function showIndex() {
+  try {
+    const vids = await (await fetch("/list")).json();
+    if (!vids.length) { list.innerHTML += '<div class="row">還沒有影片,去 /admin 建立</div>'; return; }
+    for (const v of vids) {
+      const d = document.createElement("div");
+      d.className = "row";
+      d.innerHTML = '<span class="zh"></span><span class="ko"></span>';
+      d.querySelector(".zh").textContent = v.title || v.id;
+      d.querySelector(".ko").textContent = v.cues + " cues";
+      d.onclick = () => location.search = "?v=" + v.id;
+      list.appendChild(d);
+    }
+  } catch (e) { list.innerHTML += '<div class="row">清單載入失敗(本檔案可能是離線單檔版)</div>'; }
+}
+
+function initPlayer(vid, cues) {
+  speech = cues.filter(c => c.kind === "speech");
+  cards = cues.filter(c => c.kind === "card");
+  for (const c of cues) {
+    const div = document.createElement("div");
+    div.className = "row" + (c.kind === "card" ? " card" : "");
+    const t = Math.floor(c.start);
+    const ts = String(Math.floor(t/60)).padStart(2,"0") + ":" + String(t%60).padStart(2,"0");
+    div.innerHTML = '<span class="t">' + ts + '</span>' +
+      (c.kind === "speech" && c.ko ? '<span class="ko"></span>' : "") + '<span class="zh"></span>';
+    if (c.kind === "speech" && c.ko) div.querySelector(".ko").textContent = c.ko;
+    div.querySelector(".zh").textContent = c.zh;
+    div.onclick = () => { if (yt && yt.seekTo) { yt.seekTo(c.start, true); yt.playVideo(); } };
+    list.appendChild(div);
+    rows.set(c.id, div);
+  }
+  if (ytReady) createYT(vid); else pendingVid = vid;
+}
+
+function activeAt(arr, t) {
+  const out = [];
+  for (const c of arr) { if (c.start > t) break; if (t < c.end) out.push(c); }
+  return out;
+}
+
 setInterval(() => {
   if (!yt || !yt.getCurrentTime) return;
   const t = yt.getCurrentTime();
-
   const sp = activeAt(speech, t);
   const cd = activeAt(cards, t);
   const bandKey = sp.map(c=>c.id).join(",") + "|" + cd.map(c=>c.id).join(",") + "|" + mode + cardMode;
@@ -185,21 +200,16 @@ setInterval(() => {
   if (bandKey === lastBandKey) return;
   lastBandKey = bandKey;
 
-  // 字幕帶
   const cur = sp[sp.length - 1];
-  if (mode === 2 || !cur) {
-    subKo.textContent = ""; subZh.textContent = "";
-  } else {
+  if (mode === 2 || !cur) { subKo.textContent = ""; subZh.textContent = ""; }
+  else {
     subKo.textContent = (mode === 1 && cur.ko) ? cur.ko : "";
     subZh.textContent = cur.zh;
   }
-  // 字卡併入字幕帶模式
   if (cardMode === 1 && cd.length && mode !== 2) {
     subZh.textContent = (subZh.textContent ? subZh.textContent + "\n" : "") +
       cd.map(c => "【" + c.zh.replace(/\n/g," ") + "】").join(" ");
   }
-
-  // 畫面字卡層(只在字卡組合變化時重建,避免對話換行觸發閃動)
   if (cardKey !== lastCardKey) {
     lastCardKey = cardKey;
     cardLayer.innerHTML = "";
@@ -212,8 +222,6 @@ setInterval(() => {
       }
     }
   }
-
-  // transcript highlight
   document.querySelectorAll(".row.cur").forEach(e => e.classList.remove("cur"));
   const focus = cur || cd[cd.length-1];
   if (focus) {
@@ -223,37 +231,29 @@ setInterval(() => {
   }
 }, 200);
 
-// 控制列
 const btnMode = document.getElementById("btnMode");
-btnMode.onclick = () => {
-  mode = (mode + 1) % 3;
-  btnMode.textContent = "字幕:" + ["中文", "韓+中", "隱藏"][mode];
-};
+btnMode.onclick = () => { mode = (mode + 1) % 3; btnMode.textContent = "字幕:" + ["中文","韓+中","隱藏"][mode]; };
 const btnCard = document.getElementById("btnCard");
 btnCard.onclick = () => {
   cardMode = (cardMode + 1) % 3;
-  btnCard.textContent = "字卡:" + ["畫面上", "字幕帶", "隱藏"][cardMode];
+  btnCard.textContent = "字卡:" + ["畫面上","字幕帶","隱藏"][cardMode];
   btnCard.classList.toggle("on", cardMode !== 2);
 };
 const btnFollow = document.getElementById("btnFollow");
-btnFollow.onclick = () => {
-  follow = !follow;
-  btnFollow.classList.toggle("on", follow);
-};
-// 全螢幕:fullscreen 整個 stage(含字幕帶與字卡層),而非 YouTube 原生全螢幕
+btnFollow.onclick = () => { follow = !follow; btnFollow.classList.toggle("on", follow); };
 const btnFull = document.getElementById("btnFull");
 const stage = document.querySelector(".stage");
 btnFull.onclick = () => {
-  if (document.fullscreenElement || document.webkitFullscreenElement) {
+  if (document.fullscreenElement || document.webkitFullscreenElement)
     (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-  } else {
-    (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
-  }
+  else (stage.requestFullscreen || stage.webkitRequestFullscreen).call(stage);
 };
 document.addEventListener("fullscreenchange", () => {
   btnFull.classList.toggle("on", !!document.fullscreenElement);
   btnFull.textContent = document.fullscreenElement ? "⛶ 離開全螢幕" : "⛶ 全螢幕";
 });
+
+boot();
 </script>
 </body>
 </html>
