@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>나영석 VS 막내PD — 台灣正體中文字幕 POC</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #262b36;
+    --fg: #e8eaf0; --dim: #8b93a5; --accent: #ffd54a; --ko: #9ecbff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; font-weight: 600; }
+  header .meta { font-size: 12px; color: var(--dim); }
+  .controls { margin-left: auto; display: flex; gap: 8px; }
+  .controls button {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  .controls button.on { border-color: var(--accent); color: var(--accent); }
+  main { flex: 1; display: flex; min-height: 0; }
+  .stage { flex: 1.6; display: flex; flex-direction: column; min-width: 0; }
+  .video-wrap { position: relative; background: #000; flex: 1; min-height: 0; }
+  .video-wrap iframe, .video-wrap #player { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* 畫面字卡層(疊在影片上,韓綜風) */
+  #cardLayer {
+    position: absolute; top: 6%; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    pointer-events: none; z-index: 5;
+  }
+  .card-chip {
+    max-width: 82%; background: rgba(255,255,255,.94); color: #17181c;
+    font-weight: 700; font-size: clamp(14px, 2.1vw, 24px); line-height: 1.35;
+    padding: .35em .9em; border-radius: .55em; text-align: center;
+    box-shadow: 0 4px 18px rgba(0,0,0,.45);
+    animation: pop .18s ease-out;
+  }
+  @keyframes pop { from { transform: translateY(-6px); opacity: 0; } }
+
+  /* 對話字幕帶 */
+  #subBand {
+    background: rgba(10,12,16,.92); border-top: 1px solid var(--line);
+    padding: 10px 18px 14px; text-align: center; min-height: 84px;
+  }
+  #subKo { color: var(--ko); font-size: clamp(12px, 1.4vw, 15px); min-height: 1.3em; opacity: .85; }
+  #subZh { font-size: clamp(18px, 2.6vw, 28px); font-weight: 600; line-height: 1.4; white-space: pre-line; }
+  #subZh .warn { color: var(--accent); }
+
+  /* transcript */
+  aside {
+    flex: 1; border-left: 1px solid var(--line); background: var(--panel);
+    display: flex; flex-direction: column; min-width: 300px; max-width: 460px;
+  }
+  aside .head { padding: 10px 14px; font-size: 12px; color: var(--dim); border-bottom: 1px solid var(--line); }
+  #list { flex: 1; overflow-y: auto; padding: 6px 0; }
+  .row { padding: 7px 14px; cursor: pointer; border-left: 3px solid transparent; }
+  .row:hover { background: rgba(255,255,255,.04); }
+  .row.cur { background: rgba(255,213,74,.08); border-left-color: var(--accent); }
+  .row .t { color: var(--dim); font-size: 11px; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .row .ko { display: block; color: var(--ko); font-size: 12px; opacity: .75; }
+  .row .zh { font-size: 14px; white-space: pre-line; }
+  .row.card .zh { color: #ffdf80; }
+  .row.card .zh::before { content: "🃏 "; font-size: 11px; }
+
+  @media (max-width: 860px) {
+    main { flex-direction: column; }
+    aside { max-width: none; min-width: 0; border-left: 0; border-top: 1px solid var(--line); flex: 1; }
+    .stage { flex: 0 0 auto; }
+    .video-wrap { aspect-ratio: 16/9; flex: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>나영석 VS 막내PD・第1話幕後</h1>
+  <span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC</span>
+  <div class="controls">
+    <button id="btnMode">字幕:韓+中</button>
+    <button id="btnCard" class="on">字卡:畫面上</button>
+    <button id="btnFollow" class="on">跟隨捲動</button>
+  </div>
+</header>
+<main>
+  <div class="stage">
+    <div class="video-wrap">
+      <div id="player"></div>
+      <div id="cardLayer"></div>
+    </div>
+    <div id="subBand"><div id="subKo"></div><div id="subZh"></div></div>
+  </div>
+  <aside>
+    <div class="head">逐句稿(點擊跳轉)・🃏 = 畫面字卡</div>
+    <div id="list"></div>
+  </aside>
+</main>
+<script>
+const CUES = __CUES_JSON__;
+const VIDEO_ID = "tFaHkZO587c";
+
+// 顯示模式
+let mode = 1;            // 0=中, 1=韓+中, 2=隱藏
+let cardMode = 0;        // 0=畫面上, 1=併入字幕帶, 2=隱藏
+let follow = true;
+
+const speech = CUES.filter(c => c.kind === "speech");
+const cards  = CUES.filter(c => c.kind === "card");
+
+// transcript 列表
+const list = document.getElementById("list");
+const rows = new Map();
+for (const c of CUES) {
+  const div = document.createElement("div");
+  div.className = "row" + (c.kind === "card" ? " card" : "");
+  const t = Math.floor(c.start);
+  const ts = `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`;
+  div.innerHTML = `<span class="t">${ts}</span>` +
+    (c.kind === "speech" && c.ko ? `<span class="ko"></span>` : "") +
+    `<span class="zh"></span>`;
+  if (c.kind === "speech" && c.ko) div.querySelector(".ko").textContent = c.ko;
+  div.querySelector(".zh").textContent = c.zh;
+  div.onclick = () => { if (yt && yt.seekTo) { yt.seekTo(c.start, true); yt.playVideo(); } };
+  list.appendChild(div);
+  rows.set(c.id, div);
+}
+
+// YouTube IFrame API
+let yt = null;
+const tag = document.createElement("script");
+tag.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+window.onYouTubeIframeAPIReady = () => {
+  yt = new YT.Player("player", {
+    videoId: VIDEO_ID,
+    playerVars: { rel: 0, playsinline: 1, cc_load_policy: 0 },
+  });
+};
+
+// 依時間找目前 active 的 cues(排序後線性掃描 + 記憶指標,cue 數 1.5k 足夠快)
+function activeAt(arr, t) {
+  const out = [];
+  for (const c of arr) {
+    if (c.start > t) break;
+    if (t < c.end) out.push(c);
+  }
+  return out;
+}
+
+const subKo = document.getElementById("subKo");
+const subZh = document.getElementById("subZh");
+const cardLayer = document.getElementById("cardLayer");
+let lastKey = "";
+
+setInterval(() => {
+  if (!yt || !yt.getCurrentTime) return;
+  const t = yt.getCurrentTime();
+
+  const sp = activeAt(speech, t);
+  const cd = activeAt(cards, t);
+  const key = sp.map(c=>c.id).join(",") + "|" + cd.map(c=>c.id).join(",") + "|" + mode + cardMode;
+  if (key === lastKey) return;
+  lastKey = key;
+
+  // 字幕帶
+  const cur = sp[sp.length - 1];
+  if (mode === 2 || !cur) {
+    subKo.textContent = ""; subZh.textContent = "";
+  } else {
+    subKo.textContent = (mode === 1 && cur.ko) ? cur.ko : "";
+    subZh.textContent = cur.zh;
+  }
+  // 字卡併入字幕帶模式
+  if (cardMode === 1 && cd.length && mode !== 2) {
+    subZh.textContent = (subZh.textContent ? subZh.textContent + "\n" : "") +
+      cd.map(c => "【" + c.zh.replace(/\n/g," ") + "】").join(" ");
+  }
+
+  // 畫面字卡層
+  cardLayer.innerHTML = "";
+  if (cardMode === 0) {
+    for (const c of cd) {
+      const chip = document.createElement("div");
+      chip.className = "card-chip";
+      chip.textContent = c.zh;
+      cardLayer.appendChild(chip);
+    }
+  }
+
+  // transcript highlight
+  document.querySelectorAll(".row.cur").forEach(e => e.classList.remove("cur"));
+  const focus = cur || cd[cd.length-1];
+  if (focus) {
+    const row = rows.get(focus.id);
+    row.classList.add("cur");
+    if (follow) row.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+}, 200);
+
+// 控制列
+const btnMode = document.getElementById("btnMode");
+btnMode.onclick = () => {
+  mode = (mode + 1) % 3;
+  btnMode.textContent = "字幕:" + ["中文", "韓+中", "隱藏"][mode];
+};
+const btnCard = document.getElementById("btnCard");
+btnCard.onclick = () => {
+  cardMode = (cardMode + 1) % 3;
+  btnCard.textContent = "字卡:" + ["畫面上", "字幕帶", "隱藏"][cardMode];
+  btnCard.classList.toggle("on", cardMode !== 2);
+};
+const btnFollow = document.getElementById("btnFollow");
+btnFollow.onclick = () => {
+  follow = !follow;
+  btnFollow.classList.toggle("on", follow);
+};
+</script>
+</body>
+</html>
