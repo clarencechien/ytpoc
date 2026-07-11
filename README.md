@@ -175,13 +175,38 @@ ffmpeg -i video.mp4 -vf "subtitles=output/zh.ass" -c:a copy burned.mp4
 - 時間戳精度:路線B 的段內時間戳需抽驗,必要時用段落 offset 校正
 - AI Studio 免費 key 有每日配額,正式跑建議掛計費(仍然便宜)
 
-### 下一步順序
+### 進度:worker/ 骨架已完成並通過本地 e2e
 
-1. Worker + R2 骨架:貼連結 → 建 videos/<id>/ → status.json 流轉
-2. Access 接 Google SSO,鎖 /admin 與寫入 API
-3. 路線A(字幕軌 + v1 pipeline 移植)先跑通端到端
-4. 路線B(Gemini 看片)做 10 分鐘段的 POC,驗時間戳與字卡辨識品質
-5. 播放頁改吃 R2 的 cues.json(本 POC player 元件化)
+`worker/` 內含完整寫入面(建立→翻譯批次→合併驗證→index),v1 解析/對齊已移植成 JS
+(本地實測同一原料解析出 1545 cues,與 Python pipeline 一致);內建 admin 頁
+(貼連結+貼字幕原料+一鍵全自動);Access email 雙重驗證已測(非本人 403)。
+
+**部署步驟(你本機執行):**
+
+```bash
+cd worker
+npx wrangler login                       # 綁你的 Cloudflare 帳號
+npx wrangler r2 bucket create ytpoc-krsub
+echo "dummy-key-replace-me" | npx wrangler secret put GEMINI_API_KEY   # 先放 dummy
+npx wrangler deploy
+```
+
+然後到 Dashboard:
+1. **換真 key**:Workers → ytpoc-admin → Settings → Variables and Secrets →
+   編輯 `GEMINI_API_KEY`(貼 [AI Studio](https://aistudio.google.com/apikey) 申請的 key)
+2. **掛 Access**:Zero Trust → Access → Applications → Add(Self-hosted),
+   domain 填 `ytpoc-admin.<你的subdomain>.workers.dev`,policy Allow →
+   Include: Emails = 你的 Gmail,登入方式 Google。掛好後 Worker 才算上鎖
+3. **開 R2 公開讀**:R2 → ytpoc-krsub → Settings → 開 r2.dev 或綁自訂網域,
+   播放頁從這裡讀 `videos/<id>/cues.json`(下一步接上)
+
+本地開發:`cd worker && npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
+
+### 剩餘工作
+
+1. 播放頁改吃 R2 cues.json + 影片清單頁(Pages)
+2. 自動抓字幕軌(timedtext 嘗試 → 失敗 fallback 手貼,admin 頁已支援手貼)
+3. 路線B(Gemini 看片)10 分鐘段 POC,驗時間戳與字卡辨識品質
 
 ## 社群化評估(v3 方向:限縮「YouTube 韓綜」)
 
