@@ -5,12 +5,12 @@ compatibility_date = "2026-07-01"
 # R2:唯一的儲存層(無 D1)。公開讀走 r2.dev/custom domain,寫入只透過本 Worker。
 [[r2_buckets]]
 binding = "STORE"
-bucket_name = "ytpoc-krsub"
+bucket_name = "kvs-krsub"
 
 [vars]
 # Cloudflare Access 驗證後注入的 email 必須等於此值才允許寫入
 ALLOWED_EMAIL = "clarence.chien@gmail.com"
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 BATCH_SIZE = "60"
 
 # 機密(不進 repo):
