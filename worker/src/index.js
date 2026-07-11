@@ -93,9 +93,15 @@ async function createVideo(req, env) {
       body.en_vtt = got.en_vtt || undefined;
       body.title = body.title || got.title;
       source = `auto(${got.tracks.join(",")})`;
-    } else if (+body.duration_min > 0) {
-      // 路線B:Gemini 直接看片(轉錄+讀字卡+翻譯一次完成),按段處理
-      const duration_s = Math.round(+body.duration_min * 60);
+    } else {
+      // 路線B:Gemini 直接看片。片長:使用者填的優先,否則用 countTokens 自動探測
+      let duration_s = +body.duration_min > 0 ? Math.round(+body.duration_min * 60) : 0;
+      if (!duration_s) {
+        try { duration_s = await geminiProbeDuration(id, env); }
+        catch (e) {
+          return j({ error: `抓不到字幕軌(${got.err || "無可用軌"}),片長自動探測也失敗(${e.message})。請填「片長(分鐘)」或手動貼上 json3/vtt。` }, 422);
+        }
+      }
       const segments = Math.ceil(duration_s / GEMINI_SEG_S);
       await putJSON(env, `videos/${id}/meta.json`, {
         id, url: `https://www.youtube.com/watch?v=${id}`,
@@ -105,8 +111,6 @@ async function createVideo(req, env) {
         stage: "gemini", duration_s, segments, done_segments: 0, cues: 0,
       });
       return j({ id, mode: "gemini", segments });
-    } else {
-      return j({ error: `抓不到字幕軌(${got.err || "無可用軌"})。填「片長(分鐘)」改走 Gemini 看片,或手動貼上 json3/vtt。` }, 422);
     }
   }
 
@@ -222,7 +226,24 @@ async function getStatus(id, env) {
 }
 
 // ---------- 路線B:Gemini 直接看片(轉錄+字卡+翻譯,按段) ----------
-const GEMINI_SEG_S = 360; // 6 分鐘一段:控制單次延遲與輸出長度
+const GEMINI_SEG_S = 360; // 6 分鐘一段
+
+// 用 countTokens 免費探測片長:影片 token 率約 300/秒(預設解析度)
+async function geminiProbeDuration(id, env) {
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:countTokens?key=${env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        contents: [{ parts: [{ fileData: { fileUri: `https://www.youtube.com/watch?v=${id}` } }] }],
+      }),
+    });
+  if (!r.ok) throw new Error(`countTokens ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const total = (await r.json()).totalTokens;
+  if (!total || total < 300) throw new Error(`totalTokens=${total} 異常`);
+  return Math.ceil(total / 300);
+}
 
 async function geminiNextSegment(id, env) {
   const status = await getJSON(env, `videos/${id}/status.json`);
