@@ -14,9 +14,13 @@ payload = json.dumps(slim, ensure_ascii=False, separators=(",", ":"))
 # </script> 防呆
 payload = payload.replace("</", "<\\/")
 
+import subprocess
+build = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+                       capture_output=True, text=True).stdout.strip() or "dev"
+
 tpl = (ROOT / "scripts/player_template.html").read_text()
 assert "__CUES_JSON__" in tpl
-html = tpl.replace("__CUES_JSON__", payload)
+html = tpl.replace("__CUES_JSON__", payload).replace("__BUILD__", build)
 (ROOT / "player.html").write_text(html, encoding="utf-8")
 
 # Cloudflare Pages preview:public/ 整包可直接部署
