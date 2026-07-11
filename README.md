@@ -181,27 +181,6 @@ ffmpeg -i video.mp4 -vf "subtitles=output/zh.ass" -c:a copy burned.mp4
 (本地實測同一原料解析出 1545 cues,與 Python pipeline 一致);內建 admin 頁
 (貼連結+貼字幕原料+一鍵全自動);Access email 雙重驗證已測(非本人 403)。
 
-**部署步驟(你本機執行):**
-
-```bash
-cd worker
-npx wrangler login                       # 綁你的 Cloudflare 帳號
-npx wrangler r2 bucket create ytpoc-krsub
-echo "dummy-key-replace-me" | npx wrangler secret put GEMINI_API_KEY   # 先放 dummy
-npx wrangler deploy
-```
-
-然後到 Dashboard:
-1. **換真 key**:Workers → ytpoc-admin → Settings → Variables and Secrets →
-   編輯 `GEMINI_API_KEY`(貼 [AI Studio](https://aistudio.google.com/apikey) 申請的 key)
-2. **掛 Access**:Zero Trust → Access → Applications → Add(Self-hosted),
-   domain 填 `ytpoc-admin.<你的subdomain>.workers.dev`,policy Allow →
-   Include: Emails = 你的 Gmail,登入方式 Google。掛好後 Worker 才算上鎖
-3. **開 R2 公開讀**:R2 → ytpoc-krsub → Settings → 開 r2.dev 或綁自訂網域,
-   播放頁從這裡讀 `videos/<id>/cues.json`(下一步接上)
-
-本地開發:`cd worker && npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
-
 **Cloudflare 重建指南(從零開始,約 5 分鐘)**
 
 設定檔是 repo 根目錄的 **`wrangler.jsonc`**(唯一設定檔;之前卡關就是因為
