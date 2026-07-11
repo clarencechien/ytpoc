@@ -1,8 +1,14 @@
+# name 必須與 Dashboard 上 git 連動的 Worker 同名,否則部署會分家/失敗
 name = "kvsplayer"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
 
-# R2:唯一的儲存層(無 D1)。公開讀走 r2.dev/custom domain,寫入只透過本 Worker。
+# 靜態資產:public/(播放頁)。命中資產的請求直接回檔案,不進 worker 程式;
+# /admin、/videos、/cues、/list 這些路徑沒有對應檔案,才落入 worker。
+[assets]
+directory = "../public"
+
+# R2:唯一的儲存層(無 D1)。部署前 bucket 必須先建好,否則 deploy 失敗。
 [[r2_buckets]]
 binding = "STORE"
 bucket_name = "kvs-krsub"
@@ -13,6 +19,4 @@ ALLOWED_EMAIL = "clarence.chien@gmail.com"
 GEMINI_MODEL = "gemini-3.5-flash"
 BATCH_SIZE = "60"
 
-# 機密(不進 repo):
-#   npx wrangler secret put GEMINI_API_KEY
-# 本地開發用 .dev.vars(已 gitignore)
+# 機密(不進 repo):Dashboard → Settings → Variables and Secrets → GEMINI_API_KEY

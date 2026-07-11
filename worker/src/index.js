@@ -20,15 +20,24 @@ const j = (data, status = 200) =>
 
 export default {
   async fetch(req, env) {
-    const email = req.headers.get("Cf-Access-Authenticated-User-Email");
-    if (!email || email !== env.ALLOWED_EMAIL)
-      return j({ error: "forbidden: Access login required" }, 403);
-
     const url = new URL(req.url);
     const p = url.pathname.replace(/\/+$/, "") || "/";
     try {
-      if (p === "/" && req.method === "GET") return adminPage();
       let m;
+      // ---- 公開唯讀(播放頁用,不需登入)----
+      if (p === "/list" && req.method === "GET")
+        return j((await getJSON(env, "index.json")) || []);
+      if ((m = p.match(/^\/cues\/([\w-]{11})$/)) && req.method === "GET") {
+        const cues = await getJSON(env, `videos/${m[1]}/cues.json`);
+        return cues ? j(cues) : j({ error: "not found" }, 404);
+      }
+
+      // ---- 以下全部要過 Access(Google SSO)+ email allowlist ----
+      const email = req.headers.get("Cf-Access-Authenticated-User-Email");
+      if (!email || email !== env.ALLOWED_EMAIL)
+        return j({ error: "forbidden: Access login required" }, 403);
+
+      if (p === "/admin" && req.method === "GET") return adminPage();
       if (p === "/videos" && req.method === "POST") return await createVideo(req, env);
       if ((m = p.match(/^\/videos\/([\w-]{11})\/status$/)) && req.method === "GET")
         return await getStatus(m[1], env);
