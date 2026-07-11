@@ -202,7 +202,21 @@ npx wrangler deploy
 
 本地開發:`cd worker && npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
 
-**沒有 wrangler?純 Dashboard 手動部署(worker 是單檔零依賴,可直接貼):**
+**推薦:直接連 GitHub 自動部署(Workers Builds,跟 Pages 連 repo 同一套):**
+
+1. **建 R2**(一次性):Dashboard → R2 → Create bucket `ytpoc-krsub`
+2. Workers & Pages → Create → **Worker** → **Import a repository** →
+   選 `clarencechien/ytpoc` → **Root directory 填 `worker`**(monorepo 關鍵,
+   它會自動讀到 `worker/wrangler.toml`)→ 分支選你要跟的分支 → Deploy
+3. 部署一次後到 Worker → Settings → Variables and Secrets →
+   加 **Secret** `GEMINI_API_KEY`(先 `dummy`,拿到真 key 同處換掉;
+   secret 不在 git 裡,只能 Dashboard 設)
+4. 掛 Access、R2 開公開讀:同下方步驟
+
+之後每次 push 到該分支,worker 自動重建部署——AI 這邊改完推上去,你那邊就是新版。
+(明文變數 `ALLOWED_EMAIL` 等已寫在 `worker/wrangler.toml`,隨 git 部署,不用手設。)
+
+**備援:純 Dashboard 手動貼碼(worker 是單檔零依賴,可直接貼):**
 
 1. **建 R2**:Dashboard → R2 → Create bucket,名稱 `ytpoc-krsub`
 2. **建 Worker**:Workers & Pages → Create → Worker(Hello World 範本),
