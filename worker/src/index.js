@@ -449,43 +449,103 @@ function resegment(words) {
 // ---------- 內建 admin 頁 ----------
 function adminPage() {
   return new Response(`<!DOCTYPE html><html lang="zh-Hant-TW"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ytpoc admin</title>
-<style>body{font-family:sans-serif;max-width:760px;margin:2em auto;background:#0f1115;color:#e8eaf0}
-input,textarea,button{width:100%;margin:.3em 0;background:#171a21;color:#e8eaf0;border:1px solid #333;border-radius:6px;padding:.5em}
-button{cursor:pointer;width:auto;padding:.5em 1.4em}#log{white-space:pre-wrap;font-size:13px;color:#9c6}</style>
+<style>
+  :root{--bg:#0f1115;--panel:#171a21;--line:#2a3040;--fg:#e8eaf0;--dim:#8b93a5;--acc:#ffd54a;--ok:#7ec97e;--err:#ff7a7a}
+  *{box-sizing:border-box}
+  body{font-family:"Noto Sans TC",sans-serif;max-width:720px;margin:2em auto;background:var(--bg);color:var(--fg);padding:0 16px}
+  h2{margin:0 0 4px}.sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+  input,textarea{width:100%;margin:.3em 0;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:.6em .8em;font-size:14px}
+  textarea{font-family:monospace;font-size:12px}
+  button{cursor:pointer;background:var(--acc);color:#1a1a1a;border:0;border-radius:8px;padding:.6em 1.6em;font-size:14px;font-weight:700;margin-top:.4em}
+  button:disabled{opacity:.45;cursor:wait}
+  #status{display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0}
+  #stageLine{display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px}
+  #stageLine b{color:var(--acc)}
+  .bar{height:8px;background:#0a0c10;border-radius:4px;overflow:hidden}
+  #fill{height:100%;width:0%;background:var(--acc);transition:width .5s}
+  #log{margin-top:14px;font-size:13px;line-height:1.7}
+  #log div{border-left:3px solid var(--line);padding:2px 10px;margin:3px 0}
+  #log .ok{border-color:var(--ok)} #log .err{border-color:var(--err);color:var(--err);white-space:pre-wrap}
+  #log .t{color:var(--dim);font-size:11px;margin-right:8px}
+  a{color:var(--acc)}
+</style>
 <h2>ytpoc 個人版 admin</h2>
-<input id="url" placeholder="YouTube 連結">
+<div class="sub">貼 YouTube 連結 → 自動抓字幕軌;被擋就填片長走 Gemini 看片;再不行手貼原料。已存在的影片會自動續跑。</div>
+<input id="url" placeholder="YouTube 連結(必填)">
 <input id="title" placeholder="標題(選填)">
-<input id="dur" placeholder="片長(分鐘)——YouTube 擋抓軌時走 Gemini 看片必填">
-<textarea id="json3" rows="3" placeholder="(選填)ko json3 內容——留空會自動抓字幕軌"></textarea>
-<textarea id="vtt" rows="3" placeholder="(選填)en vtt 內容——留空會自動抓;有人工英文字幕品質最佳"></textarea>
-<button onclick="run()">建立並全自動翻譯</button>
+<input id="dur" placeholder="片長(分鐘)——抓軌失敗走 Gemini 看片時必填">
+<textarea id="json3" rows="2" placeholder="(選填)ko json3——留空自動抓"></textarea>
+<textarea id="vtt" rows="2" placeholder="(選填)en vtt——留空自動抓;有人工英文字幕品質最佳"></textarea>
+<button id="btn" onclick="run()">▶ 建立 / 續跑</button>
+<div id="status">
+  <div id="stageLine"><span>影片 <b id="svid">-</b></span><span id="sstage">-</span><span id="sprog">-</span></div>
+  <div class="bar"><div id="fill"></div></div>
+</div>
 <div id="log"></div>
 <script>
-const log = m => document.getElementById('log').textContent += m + '\\n';
-async function api(path, opts){ const r = await fetch(path, opts); const d = await r.json();
-  if(!r.ok) throw new Error(JSON.stringify(d)); return d; }
+const $ = id => document.getElementById(id);
+function log(m, cls){
+  const d = document.createElement('div'); if (cls) d.className = cls;
+  d.innerHTML = '<span class="t">' + new Date().toLocaleTimeString() + '</span>';
+  d.append(m); $('log').prepend(d);
+}
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  const d = await r.json().catch(() => ({error:'HTTP ' + r.status}));
+  if (!r.ok) throw new Error(d.error || JSON.stringify(d));
+  return d;
+}
+let pollTimer = null;
+function renderStatus(id, s){
+  $('status').style.display = 'block';
+  $('svid').textContent = id;
+  $('sstage').textContent = {aligned:'已對齊,待翻譯', translating:'翻譯中', translated:'翻譯完,待合併', gemini:'Gemini 看片中', done:'✅ 完成'}[s.stage] || s.stage;
+  const total = s.segments || s.batches || 1;
+  const done = s.stage === 'done' ? total : (s.done_segments ?? s.done_batches ?? 0);
+  $('sprog').textContent = done + '/' + total;
+  $('fill').style.width = Math.round(100 * done / total) + '%';
+}
+function startPoll(id){
+  stopPoll();
+  pollTimer = setInterval(async () => {
+    try {
+      const s = await api('/admin/videos/' + id + '/status');
+      renderStatus(id, s);
+      if (s.stage === 'done') stopPoll();
+    } catch (e) {}
+  }, 2500);
+}
+function stopPoll(){ if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
 async function run(){
-  try{
-    const body = { url: url.value, title: title.value, duration_min: dur.value || undefined,
-      ko_json3: json3.value || undefined, en_vtt: vtt.value || undefined };
+  const btn = $('btn'); btn.disabled = true; btn.textContent = '⏳ 執行中…';
+  log('送出任務…');
+  try {
+    const body = { url: $('url').value, title: $('title').value, duration_min: $('dur').value || undefined,
+      ko_json3: $('json3').value || undefined, en_vtt: $('vtt').value || undefined };
     const v = await api('/admin/videos', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)});
-    if (v.mode === 'gemini') {
-      log('Gemini 看片模式,共 ' + v.segments + ' 段(每段6分鐘,較慢請等)');
-      let s;
-      do { s = await api('/admin/videos/' + v.id + '/gemini', {method:'POST'});
-           log('段 ' + s.done_segments + '/' + s.segments + (s.stage==='done' ? ',完成 ' + s.cues + ' cues' : '')); }
-      while (s.stage !== 'done');
-      log('完成:/cues/' + v.id);
-      return;
+    log('✅ 已受理:' + v.id + (v.resumed ? '(續跑既有進度)' : v.mode === 'gemini' ? '(Gemini 看片,' + v.segments + ' 段)' : '(' + v.cues + ' cues)'), 'ok');
+    startPoll(v.id);
+    let s = await api('/admin/videos/' + v.id + '/status');
+    renderStatus(v.id, s);
+    if (v.mode === 'gemini' || s.stage === 'gemini') {
+      while (s.stage !== 'done') { s = await api('/admin/videos/' + v.id + '/gemini', {method:'POST'}); renderStatus(v.id, s); }
+    } else if (s.stage !== 'done') {
+      while (s.done_batches < s.batches) { s = await api('/admin/videos/' + v.id + '/translate', {method:'POST'}); renderStatus(v.id, s); }
+      s = await api('/admin/videos/' + v.id + '/finalize', {method:'POST'});
+      renderStatus(v.id, s);
     }
-    log('建立 ' + v.id + ',' + v.cues + ' cues');
-    let s;
-    do { s = await api('/admin/videos/' + v.id + '/translate', {method:'POST'});
-         log('批次 ' + s.done_batches + '/' + s.batches); } while(s.done_batches < s.batches);
-    const f = await api('/admin/videos/' + v.id + '/finalize', {method:'POST'});
-    log('完成:' + JSON.stringify(f));
-  }catch(e){ log('錯誤:' + e.message); }
+    stopPoll();
+    const a = document.createElement('a'); a.href = '/?v=' + v.id; a.target = '_blank'; a.textContent = '/?v=' + v.id;
+    const wrap = document.createElement('span'); wrap.append('🎉 完成,開啟播放頁:', a);
+    log(wrap, 'ok');
+  } catch (e) {
+    log('❌ ' + e.message + '(可直接再按一次續跑)', 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ 建立 / 續跑';
+  }
 }
 </script>`, { headers: { "content-type": "text/html; charset=utf-8" } });
 }
