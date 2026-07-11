@@ -202,6 +202,35 @@ npx wrangler deploy
 
 本地開發:`cd worker && npx wrangler dev --local`(`.dev.vars` 放本地 key,已 gitignore)。
 
+**推薦:直接連 GitHub 自動部署(Workers Builds,跟 Pages 連 repo 同一套):**
+
+1. **建 R2**(一次性):Dashboard → R2 → Create bucket `ytpoc-krsub`
+2. Workers & Pages → Create → **Worker** → **Import a repository** →
+   選 `clarencechien/ytpoc` → **Root directory 填 `worker`**(monorepo 關鍵,
+   它會自動讀到 `worker/wrangler.toml`)→ 分支選你要跟的分支 → Deploy
+3. 部署一次後到 Worker → Settings → Variables and Secrets →
+   加 **Secret** `GEMINI_API_KEY`(先 `dummy`,拿到真 key 同處換掉;
+   secret 不在 git 裡,只能 Dashboard 設)
+4. 掛 Access、R2 開公開讀:同下方步驟
+
+之後每次 push 到該分支,worker 自動重建部署——AI 這邊改完推上去,你那邊就是新版。
+(明文變數 `ALLOWED_EMAIL` 等已寫在 `worker/wrangler.toml`,隨 git 部署,不用手設。)
+
+**備援:純 Dashboard 手動貼碼(worker 是單檔零依賴,可直接貼):**
+
+1. **建 R2**:Dashboard → R2 → Create bucket,名稱 `ytpoc-krsub`
+2. **建 Worker**:Workers & Pages → Create → Worker(Hello World 範本),
+   名稱 `ytpoc-admin` → Deploy → **Edit code** → 全選刪掉,
+   把 `worker/src/index.js` 整檔內容貼上 → Deploy
+3. **綁 R2**:Worker → Settings → **Bindings** → Add → R2 bucket →
+   Variable name 填 `STORE`、bucket 選 `ytpoc-krsub`
+4. **設變數**(Settings → Variables and Secrets):
+   - Plaintext:`ALLOWED_EMAIL` = 你的 Gmail、`GEMINI_MODEL` = `gemini-2.5-flash`、`BATCH_SIZE` = `60`
+   - **Secret**:`GEMINI_API_KEY` = 先填 `dummy`,拿到 AI Studio key 後同一處編輯換掉
+5. 掛 Access 與開 R2 公開讀:同上面 Dashboard 步驟 2、3
+
+(若之後想改用 CLI:wrangler 不用安裝,有 Node 的機器 `npx wrangler ...` 會自動下載執行。)
+
 ### 剩餘工作
 
 1. 播放頁改吃 R2 cues.json + 影片清單頁(Pages)
