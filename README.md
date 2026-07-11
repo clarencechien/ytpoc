@@ -24,7 +24,9 @@
 ```
 
 - 標題自動補抓(YouTube oEmbed,不被 bot 檢查);重送會補 meta
-- **Queues 自驅動**:送出即排入 `kvs-jobs` 佇列,關頁面照跑完(失敗自動退避重試)
+- **Queues 自驅動**(Workers Paid):送出即排入 `kvs-jobs` 佇列,關頁面照跑完,
+  失敗自動退避重試(最多 8 次);**可同時排多支影片**各自獨立跑,
+  同一支 90 秒內重複送出自動去重
 - 任務可斷點續跑:同連結再按一次即繼續;截斷的舊任務填「片長」可延長掃描
 - 模型:`wrangler.jsonc` 的 `GEMINI_MODEL`(現為 gemini-3.5-flash);
   `/admin/models` 可查 key 可用清單
