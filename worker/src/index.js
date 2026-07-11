@@ -45,6 +45,8 @@ export default {
         return await translateNextBatch(m[1], env);
       if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/finalize$/)) && req.method === "POST")
         return await finalize(m[1], env);
+      if ((m = p.match(/^\/admin\/videos\/([\w-]{11})\/gemini$/)) && req.method === "POST")
+        return await geminiNextSegment(m[1], env);
       return j({ error: "not found" }, 404);
     } catch (e) {
       return j({ error: String(e && e.stack || e) }, 500);
@@ -67,16 +69,31 @@ async function createVideo(req, env) {
   const id = (body.url || "").match(/(?:v=|youtu\.be\/|shorts\/)([\w-]{11})/)?.[1];
   if (!id) return j({ error: "無法從 URL 解析 video id" }, 400);
 
-  // 沒手貼原料就自動抓字幕軌;抓不到(無字幕/YouTube 擋 IP)回明確錯誤指引手貼
+  // 沒手貼原料:先試抓字幕軌;YouTube 擋 IP 就退 Gemini 看片(路線B,需片長)
   let source = "manual";
   if (!body.ko_json3 && !body.en_vtt) {
-    const got = await fetchCaptions(id);
-    if (!got.ko_json3 && !got.en_vtt)
-      return j({ error: `自動抓不到可用字幕軌(tracks: ${got.tracks.join(", ") || "無"})。請手動貼上 json3/vtt。`, tracks: got.tracks }, 422);
-    body.ko_json3 = got.ko_json3 || undefined;
-    body.en_vtt = got.en_vtt || undefined;
-    body.title = body.title || got.title;
-    source = `auto(${got.tracks.join(",")})`;
+    let got = null;
+    try { got = await fetchCaptions(id); } catch (e) { got = { err: String(e.message || e) }; }
+    if (got && (got.ko_json3 || got.en_vtt)) {
+      body.ko_json3 = got.ko_json3 || undefined;
+      body.en_vtt = got.en_vtt || undefined;
+      body.title = body.title || got.title;
+      source = `auto(${got.tracks.join(",")})`;
+    } else if (+body.duration_min > 0) {
+      // 路線B:Gemini 直接看片(轉錄+讀字卡+翻譯一次完成),按段處理
+      const duration_s = Math.round(+body.duration_min * 60);
+      const segments = Math.ceil(duration_s / GEMINI_SEG_S);
+      await putJSON(env, `videos/${id}/meta.json`, {
+        id, url: `https://www.youtube.com/watch?v=${id}`,
+        title: body.title || id, created: new Date().toISOString(), source: "gemini-video",
+      });
+      await putJSON(env, `videos/${id}/status.json`, {
+        stage: "gemini", duration_s, segments, done_segments: 0, cues: 0,
+      });
+      return j({ id, mode: "gemini", segments });
+    } else {
+      return j({ error: `抓不到字幕軌(${got.err || "無可用軌"})。填「片長(分鐘)」改走 Gemini 看片,或手動貼上 json3/vtt。` }, 422);
+    }
   }
 
   const words = body.ko_json3 ? parseJson3(body.ko_json3) : [];
@@ -178,6 +195,78 @@ async function finalize(id, env) {
 async function getStatus(id, env) {
   const s = await getJSON(env, `videos/${id}/status.json`);
   return s ? j(s) : j({ error: "unknown video" }, 404);
+}
+
+// ---------- 路線B:Gemini 直接看片(轉錄+字卡+翻譯,按段) ----------
+const GEMINI_SEG_S = 360; // 6 分鐘一段:控制單次延遲與輸出長度
+
+async function geminiNextSegment(id, env) {
+  const status = await getJSON(env, `videos/${id}/status.json`);
+  if (!status) return j({ error: "unknown video" }, 404);
+  if (status.stage === "done") return j({ ...status, note: "already done" });
+  if (status.stage !== "gemini") return j({ error: `stage=${status.stage},非 Gemini 路線` }, 400);
+
+  const n = status.done_segments;
+  const startS = n * GEMINI_SEG_S;
+  const endS = Math.min((n + 1) * GEMINI_SEG_S, status.duration_s);
+  const prompt = `你是韓國綜藝字幕譯者兼轉錄員,處理影片 ${startS} 秒到 ${endS} 秒這一段。
+任務:
+1. 聽出所有韓語對話,依語意斷句成 cue(kind="speech",ko=韓文原文)。
+2. 讀出畫面上出現的韓綜字卡/效果字(kind="card",ko=畫面原文;背景雜訊文字不要)。
+3. 每個 cue 給台灣正體中文翻譯 zh:綜藝口語、台灣用詞(禁止:視頻/質量/網絡/信息/軟件/屏幕),每行不超過 20 個全形字,過長在語意邊界用\n斷行(最多兩行),沒把握的句尾加⚠。
+輸出 JSON 陣列(只輸出 JSON):
+[{"start":絕對秒數,"end":絕對秒數,"kind":"speech","ko":"...","zh":"..."}]
+start/end 必須是整部影片的絕對時間(此段從 ${startS} 秒開始),數字,單調遞增。`;
+
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${env.GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            {
+              fileData: { fileUri: `https://www.youtube.com/watch?v=${id}` },
+              videoMetadata: { startOffset: `${startS}s`, endOffset: `${endS}s` },
+            },
+            { text: prompt },
+          ],
+        }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
+      }),
+    });
+  if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 400)}`);
+  let cues = JSON.parse((await r.json()).candidates[0].content.parts[0].text);
+  if (!Array.isArray(cues)) throw new Error("Gemini 回傳非陣列");
+  cues = cues
+    .filter(c => c && c.zh && isFinite(+c.start) && isFinite(+c.end))
+    .map(c => ({
+      start: Math.max(startS, +(+c.start).toFixed(2)),
+      end: Math.min(endS + 2, +(+c.end).toFixed(2)),
+      kind: c.kind === "card" ? "card" : "speech",
+      ko: c.ko || "", zh: String(c.zh).trim(),
+    }));
+  await putJSON(env, `videos/${id}/gemini/seg_${String(n).padStart(2, "0")}.json`, cues);
+
+  status.done_segments = n + 1;
+  if (status.done_segments >= status.segments) {
+    const all = [];
+    for (let i = 0; i < status.segments; i++)
+      all.push(...await getJSON(env, `videos/${id}/gemini/seg_${String(i).padStart(2, "0")}.json`));
+    all.sort((a, b) => a.start - b.start);
+    const out = all.map((c, i) => ({ id: i, en: "", ...c }));
+    await putJSON(env, `videos/${id}/cues.json`, out);
+    const meta = await getJSON(env, `videos/${id}/meta.json`);
+    const index = (await getJSON(env, "index.json")) || [];
+    if (!index.find(v => v.id === id))
+      index.push({ id, title: meta.title, cues: out.length, created: meta.created });
+    await putJSON(env, "index.json", index);
+    status.stage = "done";
+    status.cues = out.length;
+  }
+  await putJSON(env, `videos/${id}/status.json`, status);
+  return j(status);
 }
 
 // ---------- 自動抓 YouTube 字幕軌(innertube player API) ----------
@@ -341,6 +430,7 @@ button{cursor:pointer;width:auto;padding:.5em 1.4em}#log{white-space:pre-wrap;fo
 <h2>ytpoc 個人版 admin</h2>
 <input id="url" placeholder="YouTube 連結">
 <input id="title" placeholder="標題(選填)">
+<input id="dur" placeholder="片長(分鐘)——YouTube 擋抓軌時走 Gemini 看片必填">
 <textarea id="json3" rows="3" placeholder="(選填)ko json3 內容——留空會自動抓字幕軌"></textarea>
 <textarea id="vtt" rows="3" placeholder="(選填)en vtt 內容——留空會自動抓;有人工英文字幕品質最佳"></textarea>
 <button onclick="run()">建立並全自動翻譯</button>
@@ -351,9 +441,18 @@ async function api(path, opts){ const r = await fetch(path, opts); const d = awa
   if(!r.ok) throw new Error(JSON.stringify(d)); return d; }
 async function run(){
   try{
-    const body = { url: url.value, title: title.value,
+    const body = { url: url.value, title: title.value, duration_min: dur.value || undefined,
       ko_json3: json3.value || undefined, en_vtt: vtt.value || undefined };
     const v = await api('/admin/videos', {method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)});
+    if (v.mode === 'gemini') {
+      log('Gemini 看片模式,共 ' + v.segments + ' 段(每段6分鐘,較慢請等)');
+      let s;
+      do { s = await api('/admin/videos/' + v.id + '/gemini', {method:'POST'});
+           log('段 ' + s.done_segments + '/' + s.segments + (s.stage==='done' ? ',完成 ' + s.cues + ' cues' : '')); }
+      while (s.stage !== 'done');
+      log('完成:/cues/' + v.id);
+      return;
+    }
     log('建立 ' + v.id + ',' + v.cues + ' cues');
     let s;
     do { s = await api('/admin/videos/' + v.id + '/translate', {method:'POST'});
