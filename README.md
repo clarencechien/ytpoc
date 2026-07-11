@@ -9,7 +9,7 @@
 |---|---|---|
 | `/` | 影片清單(標題/cue 數/YouTube 連結);`/?v=<id>` 播放頁 | 公開 |
 | `/list`、`/cues/<id>` | 清單 / 成品字幕 JSON(R2) | 公開 |
-| `/admin` | 提交頁:貼連結→ack→進度條;任務總覽(佇列中每支影片的階段/進度,5 秒自動更新) | Access(Google SSO)+ email |
+| `/admin` | 提交頁:貼連結→ack→進度條;任務總覽(階段/進度/最後錯誤,5 秒更新;停擺任務可一鍵重排) | Access(Google SSO)+ email |
 | `/admin/videos*`、`/admin/models` | pipeline API / 模型清單 | 同上 |
 
 ## 字幕產生流程(全自動)
@@ -39,6 +39,13 @@ YouTube 對 Cloudflare IP 段的 bot 檢查已封死字幕軌與影音下載
 **Gemini 直接看 YouTube URL 是目前唯一全自動路徑**,代價:
 token 消耗大(約百-數百 token/秒)、單段處理慢(30-90 秒/3 分鐘)、
 時間戳與字卡辨識品質仍在驗證。
+
+## Debug
+
+- **任務卡住**:總覽面板會顯示「最後錯誤」與停擺警告(>5 分鐘無進度),按「重排」重新入列
+- **即時 log**:Dashboard → Workers → kvsplayer → **Logs**(observability 已開),
+  queue consumer 的每次錯誤與重試都看得到
+- 佇列狀態:Dashboard → Queues → kvs-jobs(積壓量/DLQ)
 
 ## 部署 / 開發
 
