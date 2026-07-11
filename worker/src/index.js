@@ -123,12 +123,20 @@ async function createVideo(req, env) {
         existing.open = false;
         existing.segments = Math.ceil(duration_s / (existing.seg_s || 360));
         if (existing.done_segments < existing.segments) existing.stage = "gemini";
+        existing.queued_at = Date.now();
         await putJSON(env, `videos/${id}/status.json`, existing);
         const q1 = await enqueue(env, id);
         return j({ id, mode: "gemini", segments: existing.segments, resumed: true, extended: true, queued: q1 });
       }
     }
-    const q2 = existing.stage !== "done" ? await enqueue(env, id) : false;
+    let q2 = false;
+    if (existing.stage !== "done") {
+      if (!existing.queued_at || Date.now() - existing.queued_at > 90000) {
+        q2 = await enqueue(env, id);
+        existing.queued_at = Date.now();
+        await putJSON(env, `videos/${id}/status.json`, existing);
+      } else q2 = true; // 90 秒內重複送出:已在佇列中,去重
+    }
     if (existing.stage === "gemini")
       return j({ id, mode: "gemini", segments: existing.segments, resumed: true, queued: q2 });
     return j({ id, cues: existing.cues, resumed: true, queued: q2 });
