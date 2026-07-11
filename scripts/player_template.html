@@ -158,7 +158,13 @@ async function showIndex() {
       d.className = "row";
       d.innerHTML = '<span class="zh"></span><span class="ko"></span>';
       d.querySelector(".zh").textContent = v.title || v.id;
-      d.querySelector(".ko").textContent = v.cues + " cues";
+      const ko = d.querySelector(".ko");
+      ko.textContent = v.cues + " cues・" + v.id + "・";
+      const a = document.createElement("a");
+      a.href = "https://youtu.be/" + v.id; a.target = "_blank";
+      a.textContent = "YouTube ↗"; a.style.color = "var(--ko)";
+      a.onclick = e => e.stopPropagation();
+      ko.appendChild(a);
       d.onclick = () => location.search = "?v=" + v.id;
       list.appendChild(d);
     }
