@@ -132,6 +132,18 @@ card 是畫面字卡,由 en 翻譯,用韓綜字卡語感(短、有哏)。
   queue consumer 的每次錯誤與重試都看得到
 - 佇列狀態:Dashboard → Queues → kvs-jobs(積壓量/DLQ)
 
+**錯誤代碼對照(面板紅字速查):**
+
+| 錯誤 | 誰發的 | 意義 | 系統反應 |
+|---|---|---|---|
+| `524` | Cloudflare | Gemini 處理太慢(>~100s),CF 代理放棄等待——不是失敗是超時 | 自動重試;連炸降 60 秒細掃 |
+| `500 INTERNAL` | | Gemini 伺服器內部錯誤(常見於段落超出片尾) | 自動重試 → 細掃 → 片尾偵測 |
+| `No frames to extract` | Gemini | 起點已超過影片實際結尾 | **權威片尾訊號**,立即收尾合併 |
+| `429 RESOURCE_EXHAUSTED` | Gemini | 配額用盡(free tier 有每日限額與影片時數上限) | 重試無用;等隔天或掛計費 |
+| `400 API key not valid` | Gemini | key 是 dummy 或失效 | 換 Secret 後重排 |
+| JSON `SyntaxError` | 本系統 | Gemini 輸出截斷/損壞 | 漸進式自救收下壞點前內容,續掃補齊 |
+| 🛑 已停止 | 本系統 | 累計失敗 >60 次觸發保險絲 | 看錯誤判斷值不值得按重排重啟 |
+
 ## 踩坑全紀錄與反思(2026-07-11~12)
 
 | 問題 | 根因 | 更好的做法 |
