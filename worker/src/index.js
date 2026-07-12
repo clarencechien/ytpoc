@@ -97,6 +97,17 @@ export default {
         status.fail_key = key;
         status.last_error = String(e.message || e).slice(0, 300);
         status.last_error_at = new Date().toISOString();
+        if (status.stage === "gemini" && /No frames to extract/i.test(String(e.message || e))) {
+          // Gemini 明確回報起點之後無畫面 = 影片實際結尾,立刻收尾合併
+          status.duration_s = status.covered_s ?? 0;
+          status.open = false;
+          status.fail_count = 0;
+          status.last_error = "片尾偵測:影片實際長度約 " + status.duration_s + "s,收尾合併中";
+          await putJSON(env, `videos/${id}/status.json`, status);
+          await env.JOBS.send({ id });
+          msg.ack();
+          continue;
+        }
         if (status.stage === "gemini" && status.fail_count >= 2 && !status.try_len) {
           // 180s 段連炸兩次 → 降為 60s 細掃(500 幾乎都能過)
           status.try_len = 60;
