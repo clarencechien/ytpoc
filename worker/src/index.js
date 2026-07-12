@@ -142,8 +142,24 @@ export default {
           msg.ack();
           continue;
         }
+        status.total_fails = (status.total_fails || 0) + 1;
+        if (status.total_fails > 60) {
+          // 全域保險絲:防自我續命變成無限燒錢迴圈
+          status.stage = "failed";
+          status.last_error = "累計失敗超過 60 次,任務停止:" + status.last_error;
+          await putJSON(env, `videos/${id}/status.json`, status);
+          msg.ack();
+          continue;
+        }
         await putJSON(env, `videos/${id}/status.json`, status);
-        msg.retry({ delaySeconds: 30 });
+        if ((msg.attempts ?? 1) >= 3) {
+          // 訊息壽命(max_retries)比失敗階梯短:快死時發新訊息接手,
+          // fail_count 存在 R2,階梯照走,不需人工重排
+          await env.JOBS.send({ id });
+          msg.ack();
+        } else {
+          msg.retry({ delaySeconds: 30 });
+        }
       }
     }
   },
@@ -199,6 +215,7 @@ async function createVideo(req, env) {
         return j({ id, mode: "gemini", segments: existing.segments, resumed: true, extended: true, queued: q1 });
       }
     }
+    if (existing.stage === "failed") { existing.stage = "gemini"; existing.total_fails = 0; }
     let q2 = false;
     if (existing.stage !== "done") {
       if (!existing.queued_at || Date.now() - existing.queued_at > 90000) {
@@ -787,7 +804,7 @@ async function refreshJobs(){
       row.style.cssText = 'background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0';
       const badge = jb.stage === 'done' ? '<a href="/?v=' + jb.id + '" target="_blank">✅ 完成 ' + jb.cues + ' cues</a>'
           + ' <button style="padding:.1em .5em;font-size:11px" title="用既有段落免費重跑清洗" data-id="' + jb.id + '" onclick="rebuild(this.dataset.id)">♻</button>'
-        : ({gemini:'👁 Gemini 看片', translating:'✍ 翻譯中', aligned:'⏳ 待翻譯', translated:'🔗 待合併'}[jb.stage] || jb.stage) + ' ' + jb.done + '/' + jb.total
+        : ({gemini:'👁 Gemini 看片', translating:'✍ 翻譯中', aligned:'⏳ 待翻譯', translated:'🔗 待合併', failed:'🛑 已停止(按重排重啟)'}[jb.stage] || jb.stage) + ' ' + jb.done + '/' + jb.total
           + (jb.tokens ? '・' + (jb.tokens/1e6).toFixed(1) + 'M tok' : '');
       row.innerHTML = '<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span style="flex-shrink:0">' + badge + '</span></div>'
         + '<div class="bar" style="margin-top:6px"><div style="height:100%;width:' + pct + '%;background:' + (jb.stage === 'done' ? 'var(--ok)' : 'var(--acc)') + '"></div></div>';
