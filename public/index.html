@@ -104,7 +104,7 @@
 <header>
   <a id="backBtn" href="." title="回影片清單">←</a>
   <h1>나영석 VS 막내PD・第1話幕後</h1>
-  <span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・build bbc6c52</span>
+  <span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・build 6d1259b</span>
   <div class="controls">
     <button id="btnMode">字幕:韓+中</button>
     <button id="btnCard" class="on">字卡:畫面上</button>
@@ -229,7 +229,7 @@ setInterval(() => {
     lastCardKey = cardKey;
     cardLayer.innerHTML = "";
     if (cardMode === 0) {
-      for (const c of cd) {
+      for (const c of cd.slice(-2)) {  // 同時最多疊 2 張字卡,保護版面
         const chip = document.createElement("div");
         chip.className = "card-chip";
         chip.textContent = c.zh;

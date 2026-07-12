@@ -497,7 +497,18 @@ function sanitizeCues(all) {
     }
     out.push({ ...c, start: +start.toFixed(2), end: +end.toFixed(2), zh });
   }
-  return out.map((c, i) => ({ ...c, id: i, en: c.en || "" }));
+  // 同型重複合併:多次重送/不同段距造成的重疊掃描,同一句話/同一張卡會出現兩份
+  const merged = [];
+  for (const c of out) {
+    const key = c.kind + "|" + (norm(c.ko) || norm(c.zh));
+    let prev = null;
+    for (let i = merged.length - 1; i >= 0 && merged[i].start > c.start - 30; i--) {
+      if (merged[i].kind + "|" + (norm(merged[i].ko) || norm(merged[i].zh)) === key) { prev = merged[i]; break; }
+    }
+    if (prev && c.start < prev.end + 3) { prev.end = Math.max(prev.end, c.end); continue; }
+    merged.push({ ...c });
+  }
+  return merged.map((c, i) => ({ ...c, id: i, en: c.en || "" }));
 }
 
 async function assembleGemini(id, env, nSegs) {

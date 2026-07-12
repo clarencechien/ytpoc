@@ -229,7 +229,7 @@ setInterval(() => {
     lastCardKey = cardKey;
     cardLayer.innerHTML = "";
     if (cardMode === 0) {
-      for (const c of cd) {
+      for (const c of cd.slice(-2)) {  // 同時最多疊 2 張字卡,保護版面
         const chip = document.createElement("div");
         chip.className = "card-chip";
         chip.textContent = c.zh;
