@@ -20,6 +20,13 @@
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   }
   header h1 { font-size: 15px; font-weight: 600; }
+  #backBtn {
+    display: none; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 8px; flex: none;
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--fg); text-decoration: none; font-size: 16px;
+  }
+  #backBtn:hover { border-color: var(--accent); color: var(--accent); }
   header .meta { font-size: 12px; color: var(--dim); }
   .controls { margin-left: auto; display: flex; gap: 8px; }
   .controls button {
@@ -95,6 +102,7 @@
 </head>
 <body>
 <header>
+  <a id="backBtn" href="." title="回影片清單">←</a>
   <h1>나영석 VS 막내PD・第1話幕後</h1>
   <span class="meta">頻道十五夜(channel fullmoon)・台灣正體中文字幕 POC・build __BUILD__</span>
   <div class="controls">
@@ -141,6 +149,7 @@ async function boot() {
   const vid = new URLSearchParams(location.search).get("v");
   if (EMBEDDED && !vid) return initPlayer("tFaHkZO587c", EMBEDDED);
   if (vid) {
+    document.getElementById("backBtn").style.display = "flex";
     let r = await fetch("/cues/" + vid);
     if (!r.ok) r = await fetch("/cues-" + vid + ".json");
     if (r.ok) return initPlayer(vid, await r.json());
