@@ -769,7 +769,7 @@ async function refreshJobs(){
       const row = document.createElement('div');
       row.style.cssText = 'background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0';
       const badge = jb.stage === 'done' ? '<a href="/?v=' + jb.id + '" target="_blank">✅ 完成 ' + jb.cues + ' cues</a>'
-          + ' <button style="padding:.1em .5em;font-size:11px" title="用既有段落免費重跑清洗" onclick="rebuild(\'' + jb.id + '\')">♻</button>'
+          + ' <button style="padding:.1em .5em;font-size:11px" title="用既有段落免費重跑清洗" data-id="' + jb.id + '" onclick="rebuild(this.dataset.id)">♻</button>'
         : ({gemini:'👁 Gemini 看片', translating:'✍ 翻譯中', aligned:'⏳ 待翻譯', translated:'🔗 待合併'}[jb.stage] || jb.stage) + ' ' + jb.done + '/' + jb.total
           + (jb.tokens ? '・' + (jb.tokens/1e6).toFixed(1) + 'M tok' : '');
       row.innerHTML = '<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span style="flex-shrink:0">' + badge + '</span></div>'
