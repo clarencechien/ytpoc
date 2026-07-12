@@ -412,10 +412,11 @@ async function geminiNextSegment(id, env) {
    是節目的對白字幕、不是字卡,**絕對不要輸出**——同一句話只輸出一次 kind="speech",名牌直接忽略。
 3. 每個 cue 給台灣正體中文 zh:綜藝口語、台灣用詞(禁:視頻/質量/網絡/信息/軟件/屏幕);
    zh 內禁止夾雜韓文字母或英文連接詞(and/but);每行 ≤20 全形字,過長在語意邊界用\n斷行(最多兩行);沒把握句尾加⚠。
-時間戳紀律:start/end 是整部影片的絕對秒數(此段從 ${startS} 開始);**end 必須大於 start**;
-單句對白通常 2~8 秒,不確定時 end=start+4;依出現順序單調遞增。
+時間戳紀律:start/end 用 "MM:SS" 或 "H:MM:SS" 格式、整部影片的絕對時間
+(此段從 ${Math.floor(startS/60)}:${String(startS%60).padStart(2,"0")} 開始);**end 必須晚於 start**;
+單句對白通常 2~8 秒;依出現順序單調遞增。
 輸出 JSON 陣列(只輸出 JSON):
-[{"start":秒,"end":秒,"kind":"speech|card","ko":"...","zh":"..."}]
+[{"start":"MM:SS","end":"MM:SS","kind":"speech|card","ko":"...","zh":"..."}]
 若此時間段已超出影片實際結尾,只輸出空陣列 []。`;
 
   let cues = [];
@@ -435,8 +436,22 @@ async function geminiNextSegment(id, env) {
             { text: prompt },
           ],
         }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 32768,
-          mediaResolution: env.GEMINI_MEDIA_RES || "MEDIA_RESOLUTION_LOW" },
+        generationConfig: {
+          responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 32768,
+          mediaResolution: env.GEMINI_MEDIA_RES || "MEDIA_RESOLUTION_MEDIUM",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                start: { type: "STRING" }, end: { type: "STRING" },
+                kind: { type: "STRING", enum: ["speech", "card"] },
+                ko: { type: "STRING" }, zh: { type: "STRING" },
+              },
+              required: ["start", "end", "kind", "zh"],
+            },
+          },
+        },
       }),
     });
   if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 400)}`);
@@ -457,7 +472,13 @@ async function geminiNextSegment(id, env) {
       throw new Error("Gemini 回傳無法修復的 JSON: " + raw.slice(0, 120));
   }
   if (!Array.isArray(cues)) throw new Error("Gemini 回傳非陣列");
+  const toSec = v => {
+    if (typeof v === "number") return v;
+    const p = String(v).trim().split(":").map(Number);
+    return p.some(isNaN) ? NaN : p.reduce((a, b) => a * 60 + b, 0);
+  };
   cues = cues
+    .map(c => c && { ...c, start: toSec(c.start), end: toSec(c.end) })
     .filter(c => c && c.zh && isFinite(+c.start) && isFinite(+c.end))
     .map(c => ({
       start: Math.max(startS, +(+c.start).toFixed(2)),
