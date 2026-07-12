@@ -428,10 +428,16 @@ async function geminiNextSegment(id, env) {
   const raw = resp.candidates[0].content.parts[0].text;
   try { cues = JSON.parse(raw); }
   catch (e) {
-    // 輸出被截斷:砍到最後一個完整物件自救
-    const cut = raw.lastIndexOf("}");
-    if (cut < 0) throw new Error("Gemini 回傳非 JSON: " + raw.slice(0, 120));
-    cues = JSON.parse(raw.slice(0, cut + 1) + "]");
+    // 輸出截斷或中途損壞:從尾端往前逐個 } 嘗試,收下壞點之前的所有完整 cue;
+    // 壞點之後的內容由「covered_s = 最後一句結尾」機制在下一段補掃,不丟內容
+    let cut = raw.length;
+    for (let i = 0; i < 200 && !Array.isArray(cues); i++) {
+      cut = raw.lastIndexOf("}", cut - 1);
+      if (cut < 0) break;
+      try { cues = JSON.parse(raw.slice(0, cut + 1) + "]"); } catch (e2) {}
+    }
+    if (!Array.isArray(cues))
+      throw new Error("Gemini 回傳無法修復的 JSON: " + raw.slice(0, 120));
   }
   if (!Array.isArray(cues)) throw new Error("Gemini 回傳非陣列");
   cues = cues
