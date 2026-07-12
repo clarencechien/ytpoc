@@ -19,7 +19,7 @@
   // 先建 queue:Dashboard → Queues → Create → 名稱 kvs-jobs
   "queues": {
     "producers": [{ "binding": "JOBS", "queue": "kvs-jobs" }],
-    "consumers": [{ "queue": "kvs-jobs", "max_batch_size": 1, "max_retries": 8 }]
+    "consumers": [{ "queue": "kvs-jobs", "max_batch_size": 1, "max_retries": 3 }]
   },
 
   "vars": {
@@ -27,7 +27,9 @@
     "ALLOWED_EMAIL": "clarence.chien@gmail.com",
     // 要換模型改這裡;可開 /admin/models 查你的 key 可用的模型清單
     "GEMINI_MODEL": "gemini-3.5-flash",
-    "BATCH_SIZE": "60"
+    "BATCH_SIZE": "60",
+    // 影片解析度:LOW 省約 4 倍 token;若字卡辨識變差改 MEDIA_RESOLUTION_MEDIUM
+    "GEMINI_MEDIA_RES": "MEDIA_RESOLUTION_LOW"
   }
 
   // 機密(不進 repo):Dashboard → Worker → Settings → Variables and Secrets

@@ -54,6 +54,7 @@ export default {
           const total = s.segments || s.batches || 1;
           const done = s.stage === "done" ? total : (s.done_segments ?? s.done_batches ?? 0);
           return { id, title: mt?.title || id, stage: s.stage, done, total, cues: s.cues || 0,
+                   tokens: s.tokens_used || 0,
                    last_error: s.last_error || null,
                    stalled: s.stage !== "done" && s.queued_at && Date.now() - s.queued_at > 300000 };
         }));
@@ -405,11 +406,14 @@ start/end 必須是整部影片的絕對時間(此段從 ${startS} 秒開始),�
             { text: prompt },
           ],
         }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 32768 },
+        generationConfig: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 32768,
+          mediaResolution: env.GEMINI_MEDIA_RES || "MEDIA_RESOLUTION_LOW" },
       }),
     });
   if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 400)}`);
-  const raw = (await r.json()).candidates[0].content.parts[0].text;
+  const resp = await r.json();
+  status.tokens_used = (status.tokens_used || 0) + (resp.usageMetadata?.totalTokenCount || 0);
+  const raw = resp.candidates[0].content.parts[0].text;
   try { cues = JSON.parse(raw); }
   catch (e) {
     // 輸出被截斷:砍到最後一個完整物件自救
@@ -714,7 +718,8 @@ async function refreshJobs(){
       const row = document.createElement('div');
       row.style.cssText = 'background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:6px 0';
       const badge = jb.stage === 'done' ? '<a href="/?v=' + jb.id + '" target="_blank">✅ 完成 ' + jb.cues + ' cues</a>'
-        : ({gemini:'👁 Gemini 看片', translating:'✍ 翻譯中', aligned:'⏳ 待翻譯', translated:'🔗 待合併'}[jb.stage] || jb.stage) + ' ' + jb.done + '/' + jb.total;
+        : ({gemini:'👁 Gemini 看片', translating:'✍ 翻譯中', aligned:'⏳ 待翻譯', translated:'🔗 待合併'}[jb.stage] || jb.stage) + ' ' + jb.done + '/' + jb.total
+          + (jb.tokens ? '・' + (jb.tokens/1e6).toFixed(1) + 'M tok' : '');
       row.innerHTML = '<div style="display:flex;justify-content:space-between;gap:8px"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><span style="flex-shrink:0">' + badge + '</span></div>'
         + '<div class="bar" style="margin-top:6px"><div style="height:100%;width:' + pct + '%;background:' + (jb.stage === 'done' ? 'var(--ok)' : 'var(--acc)') + '"></div></div>';
       row.querySelector('span').textContent = jb.title;
