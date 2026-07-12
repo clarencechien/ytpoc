@@ -28,8 +28,8 @@
     // 要換模型改這裡;可開 /admin/models 查你的 key 可用的模型清單
     "GEMINI_MODEL": "gemini-3.5-flash",
     "BATCH_SIZE": "60",
-    // 影片解析度:LOW 省約 4 倍 token;若字卡辨識變差改 MEDIA_RESOLUTION_MEDIUM
-    "GEMINI_MEDIA_RES": "MEDIA_RESOLUTION_LOW"
+    // 影片解析度:LOW 省 4 倍但字卡辨識差(實測),MEDIUM 品質優先
+    "GEMINI_MEDIA_RES": "MEDIA_RESOLUTION_MEDIUM"
   }
 
   // 機密(不進 repo):Dashboard → Worker → Settings → Variables and Secrets
