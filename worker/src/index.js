@@ -350,7 +350,7 @@ async function finalize(id, env) {
   const banned = ["视", "質量", "網絡", "軟件", "屏幕", "立馬"];
   const problems = [];
   const cues = aligned.map(c => {
-    const z = (zh.get(c.id) || "").trim();
+    const z = (zh.get(c.id) || "").replace(/\\n/g, "\n").trim();
     if (!z) problems.push(`empty ${c.id}`);
     for (const b of banned) if (z.includes(b)) problems.push(`banned ${b} @${c.id}`);
     return { ...c, zh: z };
@@ -411,7 +411,7 @@ async function geminiNextSegment(id, env) {
    ⚠ 畫面下方與對白同步的內嵌字幕(常見「說話者名牌 | 對白內容」格式,內容跟講的話相同)
    是節目的對白字幕、不是字卡,**絕對不要輸出**——同一句話只輸出一次 kind="speech",名牌直接忽略。
 3. 每個 cue 給台灣正體中文 zh:綜藝口語、台灣用詞(禁:視頻/質量/網絡/信息/軟件/屏幕);
-   zh 內禁止夾雜韓文字母或英文連接詞(and/but);每行 ≤20 全形字,過長在語意邊界用\n斷行(最多兩行);沒把握句尾加⚠。
+   zh 內禁止夾雜韓文字母或英文連接詞(and/but);每行 ≤20 全形字,過長在語意邊界斷行(最多兩行,用 JSON 字串換行跳脫,勿輸出反斜線加n的字面文字);沒把握句尾加⚠。
 時間戳紀律:start/end 用 "MM:SS" 或 "H:MM:SS" 格式、整部影片的絕對時間
 (此段從 ${Math.floor(startS/60)}:${String(startS%60).padStart(2,"0")} 開始);**end 必須晚於 start**;
 單句對白通常 2~8 秒;依出現順序單調遞增。
@@ -525,6 +525,7 @@ function sanitizeCues(all) {
     if (!(end > start)) end = start + 4;
     if (c.kind === "speech" && end - start > 15) end = start + 15;
     let zh = String(c.zh || "")
+      .replace(/\\n/g, "\n")
       .replace(/\s+and\s+/g, "和").replace(/\s+but\s+/g, "但")
       .replace(/[\uAC00-\uD7A3]+/g, "")
       .replace(/^[,。、·\s]+/, "").trim();
